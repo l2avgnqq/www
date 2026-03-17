@@ -4,18 +4,19 @@
 <meta charset="UTF-8">
 <title>EXP</title>
 <style>
-body { font-family: Arial; background: linear-gradient(135deg, #1a1a2e, #16213e); color:#fff; text-align:center; margin:0; }
+body { font-family: Arial; background: linear-gradient(135deg,#1a1a2e,#16213e); color:#fff; text-align:center; margin:0; }
 .container { margin:20px; }
 input, button { padding:8px; margin:5px; border-radius:8px; border:none; }
 button { font-weight:bold; cursor:pointer; }
 .add-player-btn { background:#00adb5; color:#fff; }
 .global-btn { background:#34495e; color:white; }
-.players { display:grid; grid-template-columns: repeat(auto-fit, minmax(180px,1fr)); gap:15px; padding:20px; }
+.players { display:grid; grid-template-columns: repeat(auto-fit,minmax(180px,1fr)); gap:15px; padding:20px; }
 .player { background: rgba(255,255,255,0.08); border-radius:12px; padding:15px; }
 .pause-btn { background:#f39c12; color:#fff; }
 .resume-btn { background:#2ecc71; color:#fff; }
 .add-btn { background:#3498db; color:#fff; }
 input { width:50px; padding:3px; border-radius:5px; border:none; }
+.expired { background: rgba(255,0,0,0.4); }
 </style>
 </head>
 <body>
@@ -38,20 +39,16 @@ input { width:50px; padding:3px; border-radius:5px; border:none; }
 <audio id="alarm" src="https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg" preload="auto"></audio>
 
 <script>
-// Використовуємо вигаданий Box ID
-const boxURL = "https://jsonbox.io/box_exp_timer_demo";
-
+const boxURL = "https://jsonbox.io/box_exp_timer_demo"; // вигаданий Box ID
 let timerData = {};
 let notified = {};
 
-// Формат часу
 function formatTime(sec){ let m=Math.floor(sec/60); let s=sec%60; return m+":"+(s<10?"0":"")+s; }
-function getCurrentTime(p){ return p.running ? Math.max(0, p.time - Math.floor((Date.now()-p.start)/1000)) : p.time; }
+function getCurrentTime(p){ return p.running ? Math.max(0,p.time-Math.floor((Date.now()-p.start)/1000)) : p.time; }
 
-// Створюємо картку гравця
 function createPlayer(name, p){
     const container = document.getElementById("players");
-    if(document.getElementById("player_"+name)) return; // не створювати двічі
+    if(document.getElementById("player_"+name)) return;
     const div = document.createElement("div");
     div.id = "player_"+name;
     div.className = "player";
@@ -70,79 +67,68 @@ function createPlayer(name, p){
     div.querySelector(".add-btn").onclick = ()=>{
         const val = parseInt(div.querySelector("input").value);
         if(!val) return;
-        addTime(name, val*60);
+        addTime(name,val*60);
         div.querySelector("input").value = "";
         saveTimer();
     };
 }
 
-// Додавання нового гравця
 function addNewPlayer(){
     const name = document.getElementById("newName").value.trim();
     const minutes = parseInt(document.getElementById("newMinutes").value);
     if(!name || !minutes) return;
-    if(timerData[name]) addTime(name, minutes*60);
-    else {
-        timerData[name] = { time: minutes*60, running:true, start:Date.now() };
-        createPlayer(name, timerData[name]);
-    }
+    if(timerData[name]) addTime(name,minutes*60);
+    else { timerData[name]={time:minutes*60,running:true,start:Date.now()}; createPlayer(name,timerData[name]); }
     document.getElementById("newName").value = "";
     document.getElementById("newMinutes").value = "";
     saveTimer();
 }
 
-// Управління часом
 function pause(name){ let p=timerData[name]; if(p.running){ p.time=getCurrentTime(p); p.running=false; } }
 function resume(name){ let p=timerData[name]; if(!p.running){ p.start=Date.now(); p.running=true; } }
-function addTime(name, sec){ let p=timerData[name]; p.time=getCurrentTime(p)+sec; p.start=Date.now(); }
-
-// Глобальні кнопки
+function addTime(name,sec){ let p=timerData[name]; p.time=getCurrentTime(p)+sec; p.start=Date.now(); }
 function pauseAll(){ for(let n in timerData) pause(n); saveTimer(); }
 function resumeAll(){ for(let n in timerData) resume(n); saveTimer(); }
 
-// Збереження на jsonbox.io
 async function saveTimer(){
     try{
-        await fetch(boxURL, {
-            method:"POST",
-            headers:{ 'Content-Type':'application/json' },
-            body: JSON.stringify({players: timerData})
-        });
+        await fetch(boxURL,{method:"POST",headers:{'Content-Type':'application/json'},body:JSON.stringify({players:timerData})});
     }catch(e){ console.error(e); }
 }
 
-// Завантаження з jsonbox.io
 async function loadTimer(){
     try{
         const res = await fetch(boxURL);
         const data = await res.json();
         if(!data.length) return;
-        timerData = data[data.length-1].players || {};
+        // об’єднуємо останні значення гравців
+        data.forEach(entry=>{
+            if(!entry.players) return;
+            for(let name in entry.players){
+                timerData[name] = entry.players[name];
+            }
+        });
         for(let name in timerData){
-            const p = timerData[name];
-            createPlayer(name, p);
+            createPlayer(name,timerData[name]);
         }
     }catch(e){ console.error(e); }
 }
 
-// Оновлення часу щосекунди
 function updateTimers(){
     for(let name in timerData){
-        const p = timerData[name];
-        const span = document.querySelector("#player_"+name+" .time");
-        if(span) span.innerText = formatTime(getCurrentTime(p));
-
-        if(getCurrentTime(p)===0 && !notified[name]){
-            document.getElementById("alarm").play();
-            notified[name]=true;
+        const p=timerData[name];
+        const span=document.querySelector("#player_"+name+" .time");
+        const div=document.getElementById("player_"+name);
+        if(span){ 
+            const t = getCurrentTime(p);
+            span.innerText = formatTime(t);
+            if(t===0){ div.classList.add("expired"); if(!notified[name]){ document.getElementById("alarm").play(); notified[name]=true; } }
         }
     }
 }
 
-setInterval(updateTimers, 1000);
-setInterval(loadTimer, 3000);
-
-// Завантаження даних при старті
+setInterval(updateTimers,1000);
+setInterval(loadTimer,3000);
 loadTimer();
 </script>
 
