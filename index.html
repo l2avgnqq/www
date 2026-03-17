@@ -2,37 +2,177 @@
 <html lang="uk">
 <head>
 <meta charset="UTF-8">
-<title>Supabase Test</title>
+<title>EXP Timer Supabase</title>
+<style>
+body { font-family: Arial; background: #1a1a2e; color:#fff; text-align:center; margin:0; }
+.container { margin:20px; }
+input, button { padding:8px; margin:5px; border-radius:8px; border:none; }
+button { font-weight:bold; cursor:pointer; }
+.add-player-btn { background:#00adb5; color:#fff; }
+.global-btn { background:#34495e; color:white; }
+.players { display:grid; grid-template-columns: repeat(auto-fit,minmax(180px,1fr)); gap:15px; padding:20px; }
+.player { background: rgba(255,255,255,0.08); border-radius:12px; padding:15px; }
+.pause-btn { background:#f39c12; color:#fff; }
+.resume-btn { background:#2ecc71; color:#fff; }
+.add-btn { background:#3498db; color:#fff; }
+input { width:50px; padding:3px; border-radius:5px; border:none; }
+.expired { background: rgba(255,0,0,0.4); }
+</style>
 </head>
 <body>
-<h1>Supabase Test</h1>
-<input id="nameInput" placeholder="Ім'я">
-<button id="addBtn">Додати</button>
-<div id="output"></div>
+
+<h1>EXP Timer Supabase</h1>
+
+<div class="container">
+  <input id="newName" placeholder="Ім'я нового гравця">
+  <input id="newMinutes" type="number" placeholder="Хвилини">
+  <button class="add-player-btn" id="addPlayerBtn">Додати гравця</button>
+</div>
+
+<div class="container">
+  <button class="global-btn" id="pauseAllBtn">⏸ Пауза всім</button>
+  <button class="global-btn" id="resumeAllBtn">▶ Продовжити всім</button>
+</div>
+
+<div id="players" class="players"></div>
+<audio id="alarm" src="https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg" preload="auto"></audio>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js/dist/supabase.umd.js"></script>
 <script>
-const SUPABASE_URL = 'sb_publishable_GTPV803deiaeT6Tikf3HHg_IknudqlS';
+const SUPABASE_URL = 'https://gtleqxsiichgliwfkhbg.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_secret_kxJ86TvCukyUIAaZcrTQ9w_vNoC3szF';
 const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-document.getElementById('addBtn').onclick = async () => {
-    const name = document.getElementById('nameInput').value.trim();
-    if(!name) return alert('Введіть ім’я');
+let timerData = {};
+let notified = {};
 
-    const {data, error} = await supabase.from('timers').upsert({
-        name: name,
-        time: 60,
-        running: true,
-        start: new Date().toISOString()
-    });
+function formatTime(sec){ let m=Math.floor(sec/60); let s=sec%60; return m+":"+(s<10?"0":"")+s; }
 
-    if(error) {
-        document.getElementById('output').innerText = 'Помилка: ' + error.message;
+function getCurrentTime(p){
+    if(!p.start) return p.time;
+    return p.running ? Math.max(0, p.time - Math.floor((Date.now() - new Date(p.start).getTime())/1000)) : p.time;
+}
+
+function createPlayer(name,p){
+    if(document.getElementById("player_"+name)) return;
+    const div = document.createElement("div");
+    div.id = "player_"+name;
+    div.className = "player";
+    div.innerHTML = `
+        <b>${name}</b><br>
+        Час: <span class="time">${formatTime(getCurrentTime(p))}</span><br><br>
+        <button class="pause-btn">⏸ Пауза</button>
+        <button class="resume-btn">▶ Продовжити</button><br><br>
+        <input type="number" placeholder="+ хв">
+        <button class="add-btn">Додати</button>
+    `;
+    document.getElementById("players").appendChild(div);
+
+    div.querySelector(".pause-btn").onclick = async ()=>{
+        p.time=getCurrentTime(p);
+        p.running=false;
+        await saveTimerSupabase(name,p);
+    };
+    div.querySelector(".resume-btn").onclick = async ()=>{
+        p.start=new Date().toISOString();
+        p.running=true;
+        await saveTimerSupabase(name,p);
+    };
+    div.querySelector(".add-btn").onclick = async ()=>{
+        const val = parseInt(div.querySelector("input").value);
+        if(!val) return;
+        p.time=getCurrentTime(p)+val*60;
+        p.start=new Date().toISOString();
+        div.querySelector("input").value="";
+        notified[name]=false;
+        div.classList.remove("expired");
+        await saveTimerSupabase(name,p);
+    };
+}
+
+function addNewPlayer(){
+    const name = document.getElementById("newName").value.trim();
+    const minutes = parseInt(document.getElementById("newMinutes").value);
+    if(!name || !minutes) return;
+
+    if(timerData[name]){
+        timerData[name].time += minutes*60;
     } else {
-        document.getElementById('output').innerText = 'Додано: ' + JSON.stringify(data);
+        timerData[name]={time:minutes*60,running:true,start:new Date().toISOString()};
+        createPlayer(name,timerData[name]);
     }
-};
+
+    document.getElementById("newName").value="";
+    document.getElementById("newMinutes").value="";
+    saveTimerSupabase(name,timerData[name]);
+}
+
+function pauseAll(){ 
+    for(let n in timerData){
+        timerData[n].time=getCurrentTime(timerData[n]);
+        timerData[n].running=false;
+        saveTimerSupabase(n,timerData[n]);
+    }
+}
+
+function resumeAll(){ 
+    for(let n in timerData){
+        timerData[n].start=new Date().toISOString();
+        timerData[n].running=true;
+        saveTimerSupabase(n,timerData[n]);
+    }
+}
+
+async function saveTimerSupabase(name,p){
+    await supabase.from('timers').upsert({
+        name:name,
+        time:getCurrentTime(p),
+        running:p.running,
+        start:p.start
+    }, {onConflict:['name']});
+}
+
+async function loadTimersSupabase(){
+    const {data,error} = await supabase.from('timers').select('*');
+    if(error){ console.log(error); return; }
+    data.forEach(p=>{
+        if(!timerData[p.name]){
+            timerData[p.name]={time:p.time,running:p.running,start:p.start};
+            createPlayer(p.name,timerData[p.name]);
+        } else {
+            timerData[p.name].time=p.time;
+            timerData[p.name].running=p.running;
+            timerData[p.name].start=p.start;
+        }
+    });
+}
+
+function updateTimers(){
+    for(let name in timerData){
+        const p = timerData[name];
+        const span = document.querySelector("#player_"+name+" .time");
+        const div = document.getElementById("player_"+name);
+        if(span){
+            const t = getCurrentTime(p);
+            span.innerText = formatTime(t);
+            if(t===0){ 
+                div.classList.add("expired"); 
+                if(!notified[name]){ 
+                    document.getElementById("alarm").play(); 
+                    notified[name]=true; 
+                }
+            }
+        }
+    }
+}
+
+document.getElementById("addPlayerBtn").onclick = addNewPlayer;
+document.getElementById("pauseAllBtn").onclick = pauseAll;
+document.getElementById("resumeAllBtn").onclick = resumeAll;
+
+setInterval(updateTimers,1000);
+setInterval(loadTimersSupabase,3000);
+loadTimersSupabase();
 </script>
 </body>
 </html>
