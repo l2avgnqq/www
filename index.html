@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <title>EXP</title>
 <style>
-body { font-family: Arial; background: linear-gradient(135deg, #1a1a2e, #16213e); color: #fff; text-align:center; margin:0; }
+body { font-family: Arial; background: linear-gradient(135deg, #1a1a2e, #16213e); color:#fff; text-align:center; margin:0; }
 .container { margin:20px; }
 input, button { padding:8px; margin:5px; border-radius:8px; border:none; }
 button { font-weight:bold; cursor:pointer; }
@@ -39,44 +39,40 @@ input { width:50px; padding:3px; border-radius:5px; border:none; }
 
 <script>
 const binID = "69b9333dc3097a1dd531f977";
-const secretKey = "$2a$10$Ujj0JFN7XLAJbJ8UDLtUn.ZCC1uqhfYBySrybgbmRl/NQLLZoBWG";
+const secretKey = "$2a$10$Ujj0JFN7XLAJbJ8UDLtUn.ZCC1uqhfYBySrybgbmRl/NQLLJZoBWG";
 
 let timerData = { players:{} };
-let notified = {}; 
+let notified = {};
 
 // Формат часу
 function formatTime(sec){ let m=Math.floor(sec/60); let s=sec%60; return m+":"+(s<10?"0":"")+s; }
 function getCurrentTime(p){ return p.running ? Math.max(0, p.time - Math.floor((Date.now()-p.start)/1000)) : p.time; }
 
-// Створення або оновлення гравця
-function createOrUpdatePlayer(name, p){
-    let container = document.getElementById("players");
-    let div = document.getElementById("player_"+name);
-    if(!div){
-        div = document.createElement("div");
-        div.id = "player_"+name;
-        div.className = "player";
-        div.innerHTML = `
-            <b>${name}</b><br>
-            Час: <span class="time"></span><br><br>
-            <button class="pause-btn">⏸ Пауза</button>
-            <button class="resume-btn">▶ Продовжити</button><br><br>
-            <input type="number" placeholder="+ хв">
-            <button class="add-btn">Додати</button>
-        `;
-        container.appendChild(div);
+// Створюємо гравця лише один раз
+function createPlayer(name, p){
+    const container = document.getElementById("players");
+    const div = document.createElement("div");
+    div.id = "player_"+name;
+    div.className = "player";
+    div.innerHTML = `
+        <b>${name}</b><br>
+        Час: <span class="time">${formatTime(getCurrentTime(p))}</span><br><br>
+        <button class="pause-btn">⏸ Пауза</button>
+        <button class="resume-btn">▶ Продовжити</button><br><br>
+        <input type="number" placeholder="+ хв">
+        <button class="add-btn">Додати</button>
+    `;
+    container.appendChild(div);
 
-        div.querySelector(".pause-btn").onclick = ()=>{ pause(name); saveTimer(); };
-        div.querySelector(".resume-btn").onclick = ()=>{ resume(name); saveTimer(); };
-        div.querySelector(".add-btn").onclick = ()=>{
-            const val = parseInt(div.querySelector("input").value);
-            if(!val) return;
-            addTime(name, val*60);
-            div.querySelector("input").value = "";
-            saveTimer();
-        };
-    }
-    div.querySelector(".time").innerText = formatTime(getCurrentTime(p));
+    div.querySelector(".pause-btn").onclick = ()=>{ pause(name); saveTimer(); };
+    div.querySelector(".resume-btn").onclick = ()=>{ resume(name); saveTimer(); };
+    div.querySelector(".add-btn").onclick = ()=>{
+        const val = parseInt(div.querySelector("input").value);
+        if(!val) return;
+        addTime(name, val*60);
+        div.querySelector("input").value = "";
+        saveTimer();
+    };
 }
 
 // Додавання нового гравця
@@ -85,10 +81,12 @@ function addNewPlayer(){
     const minutes = parseInt(document.getElementById("newMinutes").value);
     if(!name || !minutes) return;
     if(timerData.players[name]) addTime(name, minutes*60);
-    else timerData.players[name] = { time: minutes*60, running:true, start:Date.now() };
+    else {
+        timerData.players[name] = { time: minutes*60, running:true, start:Date.now() };
+        createPlayer(name, timerData.players[name]);
+    }
     document.getElementById("newName").value = "";
     document.getElementById("newMinutes").value = "";
-    createOrUpdatePlayer(name, timerData.players[name]);
     saveTimer();
 }
 
@@ -97,7 +95,7 @@ function pause(name){ let p=timerData.players[name]; if(p.running){ p.time=getCu
 function resume(name){ let p=timerData.players[name]; if(!p.running){ p.start=Date.now(); p.running=true; } }
 function addTime(name, sec){ let p=timerData.players[name]; p.time=getCurrentTime(p)+sec; p.start=Date.now(); }
 
-// Глобальні функції
+// Глобальні кнопки
 function pauseAll(){ for(let n in timerData.players) pause(n); saveTimer(); }
 function resumeAll(){ for(let n in timerData.players) resume(n); saveTimer(); }
 
@@ -106,34 +104,35 @@ async function saveTimer(){
     try{
         await fetch(`https://api.jsonbin.io/v3/b/${binID}`, {
             method:"PUT",
-            headers:{
-                'Content-Type':'application/json',
-                'X-Master-Key':secretKey
-            },
+            headers:{ 'Content-Type':'application/json', 'X-Master-Key':secretKey },
             body: JSON.stringify(timerData)
         });
-    }catch(e){ console.error("Не вдалося зберегти:", e); }
+    }catch(e){ console.error(e); }
 }
 
 // Завантаження з jsonbin.io
 async function loadTimer(){
     try{
         const res = await fetch(`https://api.jsonbin.io/v3/b/${binID}/latest`, {
-            headers:{ 'X-Master-Key': secretKey }
+            headers:{ 'X-Master-Key':secretKey }
         });
         const data = await res.json();
         timerData = data.record;
+
         for(let name in timerData.players){
-            createOrUpdatePlayer(name, timerData.players[name]);
+            const p = timerData.players[name];
+            if(!document.getElementById("player_"+name)) createPlayer(name, p);
         }
-    }catch(e){ console.error("Не вдалося завантажити:", e); }
+    }catch(e){ console.error(e); }
 }
 
-// Оновлення часу щосекунди та звук
+// Оновлення часу щосекунди
 function updateTimers(){
     for(let name in timerData.players){
         const p = timerData.players[name];
-        createOrUpdatePlayer(name, p);
+        const span = document.querySelector("#player_"+name+" .time");
+        if(span) span.innerText = formatTime(getCurrentTime(p));
+
         if(getCurrentTime(p)===0 && !notified[name]){
             document.getElementById("alarm").play();
             notified[name]=true;
@@ -141,11 +140,9 @@ function updateTimers(){
     }
 }
 
-// Інтервали
 setInterval(updateTimers, 1000);
 setInterval(loadTimer, 3000);
 
-// Початкове завантаження
 loadTimer();
 </script>
 
