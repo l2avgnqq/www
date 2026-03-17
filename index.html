@@ -2,7 +2,7 @@
 <html lang="uk">
 <head>
 <meta charset="UTF-8">
-<title>Прокачка</title>
+<title>EXP</title>
 <style>
 body { font-family: Arial; background: linear-gradient(135deg, #1a1a2e, #16213e); color:#fff; text-align:center; margin:0; }
 .container { margin:20px; }
@@ -20,7 +20,7 @@ input { width:50px; padding:3px; border-radius:5px; border:none; }
 </head>
 <body>
 
-<h1>Прокачка</h1>
+<h1>EXP</h1>
 
 <div class="container">
   <input id="newName" placeholder="Ім'я нового гравця">
@@ -38,19 +38,20 @@ input { width:50px; padding:3px; border-radius:5px; border:none; }
 <audio id="alarm" src="https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg" preload="auto"></audio>
 
 <script>
-const binID = "69b9333dc3097a1dd531f977";
-const secretKey = "$2a$10$Ujj0JFN7XLAJbJ8UDLtUn.ZCC1uqhfYBySrybgbmRl/NQLLZoBWG";
+// Використовуємо вигаданий Box ID
+const boxURL = "https://jsonbox.io/box_exp_timer_demo";
 
-let timerData = { players:{} };
+let timerData = {};
 let notified = {};
 
 // Формат часу
 function formatTime(sec){ let m=Math.floor(sec/60); let s=sec%60; return m+":"+(s<10?"0":"")+s; }
 function getCurrentTime(p){ return p.running ? Math.max(0, p.time - Math.floor((Date.now()-p.start)/1000)) : p.time; }
 
-// Створюємо гравця один раз
+// Створюємо картку гравця
 function createPlayer(name, p){
     const container = document.getElementById("players");
+    if(document.getElementById("player_"+name)) return; // не створювати двічі
     const div = document.createElement("div");
     div.id = "player_"+name;
     div.className = "player";
@@ -80,10 +81,10 @@ function addNewPlayer(){
     const name = document.getElementById("newName").value.trim();
     const minutes = parseInt(document.getElementById("newMinutes").value);
     if(!name || !minutes) return;
-    if(timerData.players[name]) addTime(name, minutes*60);
+    if(timerData[name]) addTime(name, minutes*60);
     else {
-        timerData.players[name] = { time: minutes*60, running:true, start:Date.now() };
-        createPlayer(name, timerData.players[name]);
+        timerData[name] = { time: minutes*60, running:true, start:Date.now() };
+        createPlayer(name, timerData[name]);
     }
     document.getElementById("newName").value = "";
     document.getElementById("newMinutes").value = "";
@@ -91,45 +92,43 @@ function addNewPlayer(){
 }
 
 // Управління часом
-function pause(name){ let p=timerData.players[name]; if(p.running){ p.time=getCurrentTime(p); p.running=false; } }
-function resume(name){ let p=timerData.players[name]; if(!p.running){ p.start=Date.now(); p.running=true; } }
-function addTime(name, sec){ let p=timerData.players[name]; p.time=getCurrentTime(p)+sec; p.start=Date.now(); }
+function pause(name){ let p=timerData[name]; if(p.running){ p.time=getCurrentTime(p); p.running=false; } }
+function resume(name){ let p=timerData[name]; if(!p.running){ p.start=Date.now(); p.running=true; } }
+function addTime(name, sec){ let p=timerData[name]; p.time=getCurrentTime(p)+sec; p.start=Date.now(); }
 
 // Глобальні кнопки
-function pauseAll(){ for(let n in timerData.players) pause(n); saveTimer(); }
-function resumeAll(){ for(let n in timerData.players) resume(n); saveTimer(); }
+function pauseAll(){ for(let n in timerData) pause(n); saveTimer(); }
+function resumeAll(){ for(let n in timerData) resume(n); saveTimer(); }
 
-// Збереження на jsonbin.io
+// Збереження на jsonbox.io
 async function saveTimer(){
     try{
-        await fetch(`https://api.jsonbin.io/v3/b/${binID}`, {
-            method:"PUT",
-            headers:{ 'Content-Type':'application/json', 'X-Master-Key':secretKey },
-            body: JSON.stringify(timerData)
+        await fetch(boxURL, {
+            method:"POST",
+            headers:{ 'Content-Type':'application/json' },
+            body: JSON.stringify({players: timerData})
         });
     }catch(e){ console.error(e); }
 }
 
-// Завантаження з jsonbin.io
+// Завантаження з jsonbox.io
 async function loadTimer(){
     try{
-        const res = await fetch(`https://api.jsonbin.io/v3/b/${binID}/latest`, {
-            headers:{ 'X-Master-Key':secretKey }
-        });
+        const res = await fetch(boxURL);
         const data = await res.json();
-        timerData = data.record;
-
-        for(let name in timerData.players){
-            const p = timerData.players[name];
-            if(!document.getElementById("player_"+name)) createPlayer(name, p);
+        if(!data.length) return;
+        timerData = data[data.length-1].players || {};
+        for(let name in timerData){
+            const p = timerData[name];
+            createPlayer(name, p);
         }
     }catch(e){ console.error(e); }
 }
 
 // Оновлення часу щосекунди
 function updateTimers(){
-    for(let name in timerData.players){
-        const p = timerData.players[name];
+    for(let name in timerData){
+        const p = timerData[name];
         const span = document.querySelector("#player_"+name+" .time");
         if(span) span.innerText = formatTime(getCurrentTime(p));
 
@@ -143,6 +142,7 @@ function updateTimers(){
 setInterval(updateTimers, 1000);
 setInterval(loadTimer, 3000);
 
+// Завантаження даних при старті
 loadTimer();
 </script>
 
