@@ -4,20 +4,14 @@
 <meta charset="UTF-8">
 <title>EXP</title>
 <style>
-body {
-    font-family: Arial;
-    background: linear-gradient(135deg, #1a1a2e, #16213e);
-    color: #fff;
-    text-align: center;
-    margin: 0;
-}
-.container { margin: 20px; }
-input, button { padding: 8px; margin: 5px; border-radius: 8px; border: none; }
-button { font-weight: bold; cursor: pointer; }
+body { font-family: Arial; background: linear-gradient(135deg, #1a1a2e, #16213e); color: #fff; text-align:center; margin:0; }
+.container { margin:20px; }
+input, button { padding:8px; margin:5px; border-radius:8px; border:none; }
+button { font-weight:bold; cursor:pointer; }
 .add-player-btn { background:#00adb5; color:#fff; }
 .global-btn { background:#34495e; color:white; }
-.players { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px,1fr)); gap: 15px; padding: 20px; }
-.player { background: rgba(255,255,255,0.08); border-radius: 12px; padding: 15px; }
+.players { display:grid; grid-template-columns: repeat(auto-fit, minmax(180px,1fr)); gap:15px; padding:20px; }
+.player { background: rgba(255,255,255,0.08); border-radius:12px; padding:15px; }
 .pause-btn { background:#f39c12; color:#fff; }
 .resume-btn { background:#2ecc71; color:#fff; }
 .add-btn { background:#3498db; color:#fff; }
@@ -45,35 +39,26 @@ input { width:50px; padding:3px; border-radius:5px; border:none; }
 
 <script>
 const binID = "69b9333dc3097a1dd531f977";
-const secretKey = "$2a$10$Ujj0JFN7XLAJbJ8UDLtUn.ZCC1uqhfYBySrybgbmRl/NQLLJZoBWG";
+const secretKey = "$2a$10$Ujj0JFN7XLAJbJ8UDLtUn.ZCC1uqhfYBySrybgbmRl/NQLLZoBWG";
 
 let timerData = { players:{} };
-let notified = {}; // щоб звук спрацьовував один раз
+let notified = {}; 
 
-async function loadTimer() {
-    try {
-        const res = await fetch(`https://api.jsonbin.io/v3/b/${binID}/latest`, {
-            headers: { 'X-Master-Key': secretKey }
-        });
-        const data = await res.json();
-        timerData = data.record;
-        initPlayers();
-    } catch(e){ console.error("Не вдалося завантажити таймер:", e); }
-}
-
+// Формат часу
 function formatTime(sec){ let m=Math.floor(sec/60); let s=sec%60; return m+":"+(s<10?"0":"")+s; }
 function getCurrentTime(p){ return p.running ? Math.max(0, p.time - Math.floor((Date.now()-p.start)/1000)) : p.time; }
 
-function initPlayers() {
-    const container = document.getElementById("players");
-    container.innerHTML = "";
-    for(let name in timerData.players){
-        const p = timerData.players[name];
-        const div = document.createElement("div");
+// Створення або оновлення гравця
+function createOrUpdatePlayer(name, p){
+    let container = document.getElementById("players");
+    let div = document.getElementById("player_"+name);
+    if(!div){
+        div = document.createElement("div");
+        div.id = "player_"+name;
         div.className = "player";
         div.innerHTML = `
             <b>${name}</b><br>
-            Час: <span>${formatTime(getCurrentTime(p))}</span><br><br>
+            Час: <span class="time"></span><br><br>
             <button class="pause-btn">⏸ Пауза</button>
             <button class="resume-btn">▶ Продовжити</button><br><br>
             <input type="number" placeholder="+ хв">
@@ -81,80 +66,86 @@ function initPlayers() {
         `;
         container.appendChild(div);
 
-        const pauseBtn = div.querySelector(".pause-btn");
-        const resumeBtn = div.querySelector(".resume-btn");
-        const addBtn = div.querySelector(".add-btn");
-        const input = div.querySelector("input");
-
-        pauseBtn.onclick = () => { pause(name); saveTimer(); };
-        resumeBtn.onclick = () => { resume(name); saveTimer(); };
-        addBtn.onclick = () => {
-            const val = parseInt(input.value);
+        div.querySelector(".pause-btn").onclick = ()=>{ pause(name); saveTimer(); };
+        div.querySelector(".resume-btn").onclick = ()=>{ resume(name); saveTimer(); };
+        div.querySelector(".add-btn").onclick = ()=>{
+            const val = parseInt(div.querySelector("input").value);
             if(!val) return;
             addTime(name, val*60);
-            input.value = "";
+            div.querySelector("input").value = "";
             saveTimer();
         };
     }
+    div.querySelector(".time").innerText = formatTime(getCurrentTime(p));
 }
 
-function pause(name){ let p=timerData.players[name]; if(p.running){ p.time=getCurrentTime(p); p.running=false; } }
-function resume(name){ let p=timerData.players[name]; if(!p.running){ p.start=Date.now(); p.running=true; } }
-function addTime(name, sec){ let p=timerData.players[name]; p.time=getCurrentTime(p)+sec; p.start=Date.now(); }
-
-function addNewPlayer() {
+// Додавання нового гравця
+function addNewPlayer(){
     const name = document.getElementById("newName").value.trim();
     const minutes = parseInt(document.getElementById("newMinutes").value);
     if(!name || !minutes) return;
     if(timerData.players[name]) addTime(name, minutes*60);
-    else timerData.players[name] = { time: minutes*60, running: true, start: Date.now() };
+    else timerData.players[name] = { time: minutes*60, running:true, start:Date.now() };
     document.getElementById("newName").value = "";
     document.getElementById("newMinutes").value = "";
-    initPlayers();
+    createOrUpdatePlayer(name, timerData.players[name]);
     saveTimer();
 }
 
-function pauseAll() { for(let name in timerData.players) pause(name); saveTimer(); }
-function resumeAll() { for(let name in timerData.players) resume(name); saveTimer(); }
+// Управління часом
+function pause(name){ let p=timerData.players[name]; if(p.running){ p.time=getCurrentTime(p); p.running=false; } }
+function resume(name){ let p=timerData.players[name]; if(!p.running){ p.start=Date.now(); p.running=true; } }
+function addTime(name, sec){ let p=timerData.players[name]; p.time=getCurrentTime(p)+sec; p.start=Date.now(); }
 
-async function saveTimer() {
-    try {
+// Глобальні функції
+function pauseAll(){ for(let n in timerData.players) pause(n); saveTimer(); }
+function resumeAll(){ for(let n in timerData.players) resume(n); saveTimer(); }
+
+// Збереження на jsonbin.io
+async function saveTimer(){
+    try{
         await fetch(`https://api.jsonbin.io/v3/b/${binID}`, {
-            method: "PUT",
-            headers: { 'Content-Type': 'application/json', 'X-Master-Key': secretKey },
+            method:"PUT",
+            headers:{
+                'Content-Type':'application/json',
+                'X-Master-Key':secretKey
+            },
             body: JSON.stringify(timerData)
         });
-    } catch(e){ console.error("Не вдалося зберегти таймер:", e); }
+    }catch(e){ console.error("Не вдалося зберегти:", e); }
 }
 
-// Оновлення часу та звук при 0
-function updateTimers() {
-    const divs = document.querySelectorAll(".player");
+// Завантаження з jsonbin.io
+async function loadTimer(){
+    try{
+        const res = await fetch(`https://api.jsonbin.io/v3/b/${binID}/latest`, {
+            headers:{ 'X-Master-Key': secretKey }
+        });
+        const data = await res.json();
+        timerData = data.record;
+        for(let name in timerData.players){
+            createOrUpdatePlayer(name, timerData.players[name]);
+        }
+    }catch(e){ console.error("Не вдалося завантажити:", e); }
+}
+
+// Оновлення часу щосекунди та звук
+function updateTimers(){
     for(let name in timerData.players){
         const p = timerData.players[name];
-        let timeLeft = getCurrentTime(p);
-        divs.forEach(div => {
-            if(div.querySelector("b").innerText === name){
-                div.querySelector("span").innerText = formatTime(timeLeft);
-            }
-        });
-        // Звук, якщо час скінчився
-        if(timeLeft === 0 && !notified[name]){
+        createOrUpdatePlayer(name, p);
+        if(getCurrentTime(p)===0 && !notified[name]){
             document.getElementById("alarm").play();
-            notified[name] = true;
+            notified[name]=true;
         }
     }
 }
 
-// Автооновлення кожні 3 секунди
-setInterval(async () => {
-    await loadTimer();
-    updateTimers();
-}, 3000);
-
-// Локальне оновлення часу кожну секунду
+// Інтервали
 setInterval(updateTimers, 1000);
+setInterval(loadTimer, 3000);
 
+// Початкове завантаження
 loadTimer();
 </script>
 
