@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<title>Timer</title>
+<style>
+body {
+    font-family: Arial;
+    background: linear-gradient(135deg, #1a1a2e, #16213e);
+    color: #fff;
+    text-align: center;
+    margin: 0;
+}
+.container { margin: 20px; }
+input { padding: 10px; margin: 5px; border-radius: 8px; border: none; }
+button { padding: 10px; margin: 5px; border-radius: 8px; border: none; cursor: pointer; font-weight: bold; }
+
+.add-btn { background: #00adb5; color: white; }
+.pause-btn { background: #f39c12; }
+.resume-btn { background: #2ecc71; }
+.time-btn { background: #3498db; }
+.delete-btn { background: #e74c3c; }
+.global-btn { background:#34495e; color:white; }
+
+.players {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 15px;
+    padding: 20px;
+}
+.player {
+    background: rgba(255,255,255,0.08);
+    border-radius: 12px;
+    padding: 15px;
+}
+</style>
+</head>
+<body>
+
+<h1>Таймер</h1>
+
+<div class="container">
+    <input id="name" placeholder="Ім'я">
+    <input id="minutes" type="number" placeholder="Хвилини">
+    <button class="add-btn" onclick="addPlayer()">Додати / Додати час</button>
+</div>
+
+<button class="global-btn" onclick="pauseAll()">⏸ Пауза всім</button>
+<button class="global-btn" onclick="resumeAll()">▶ Продовжити всім</button>
+
+<div id="players" class="players"></div>
+
+<script>
+let players = JSON.parse(localStorage.getItem("players") || {});
+let playerElements = {};
+
+function save() {
+    localStorage.setItem("players", JSON.stringify(players));
+}
+
+function getCurrentTime(p) {
+    if (p.running) {
+        let elapsed = Math.floor((Date.now() - p.start) / 1000);
+        return Math.max(0, p.time - elapsed);
+    }
+    return p.time;
+}
+
+function createPlayerElement(name) {
+    const div = document.createElement("div");
+    div.className = "player";
+
+    div.innerHTML = `
+        <b>${name}</b><br><br>
+        Час: <span id="time_${name}">0:00</span><br><br>
+        <input type="number" placeholder="+ хв" id="input_${name}"><br>
+        <button class="pause-btn">Пауза</button>
+        <button class="resume-btn">Продовжити</button>
+        <button class="time-btn">Додати</button>
+        <button class="delete-btn">Видалити</button>
+    `;
+
+    const buttons = div.querySelectorAll("button");
+
+    buttons[0].onclick = () => pause(name);
+    buttons[1].onclick = () => resume(name);
+    buttons[2].onclick = () => addCustomTime(name);
+    buttons[3].onclick = () => removePlayer(name);
+
+    document.getElementById("players").appendChild(div);
+
+    playerElements[name] = div;
+}
+
+function addPlayer() {
+    const name = document.getElementById("name").value;
+    const minutes = parseInt(document.getElementById("minutes").value);
+
+    if (!name || !minutes) return;
+
+    if (players[name]) {
+        let current = getCurrentTime(players[name]);
+        players[name].time = current + minutes * 60;
+        players[name].start = Date.now();
+    } else {
+        players[name] = {
+            time: minutes * 60,
+            running: true,
+            start: Date.now()
+        };
+        createPlayerElement(name);
+    }
+
+    save();
+}
+
+function addCustomTime(name) {
+    let val = parseInt(document.getElementById("input_" + name).value);
+    if (!val) return;
+
+    let p = players[name];
+    let current = getCurrentTime(p);
+
+    p.time = current + val * 60;
+    p.start = Date.now();
+    p.running = true;
+
+    save();
+}
+
+function pause(name) {
+    let p = players[name];
+    if (p.running) {
+        p.time = getCurrentTime(p);
+        p.running = false;
+        save();
+    }
+}
+
+function resume(name) {
+    let p = players[name];
+    if (!p.running) {
+        p.start = Date.now();
+        p.running = true;
+        save();
+    }
+}
+
+function pauseAll() {
+    for (let name in players) pause(name);
+}
+
+function resumeAll() {
+    for (let name in players) resume(name);
+}
+
+function removePlayer(name) {
+    delete players[name];
+    playerElements[name].remove();
+    delete playerElements[name];
+    save();
+}
+
+function formatTime(sec) {
+    let m = Math.floor(sec / 60);
+    let s = sec % 60;
+    return m + ":" + (s < 10 ? "0" : "") + s;
+}
+
+// 🔥 тільки оновлюємо текст, без перерисовки
+function update() {
+    for (let name in players) {
+        let current = getCurrentTime(players[name]);
+        let el = document.getElementById("time_" + name);
+        if (el) el.innerText = formatTime(current);
+    }
+}
+
+// 🔥 при загрузці відновлюємо гравців
+function init() {
+    for (let name in players) {
+        createPlayerElement(name);
+    }
+}
+
+init();
+setInterval(update, 1000);
+</script>
+
+</body>
+</html>
