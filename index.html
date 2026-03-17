@@ -2,7 +2,7 @@
 <html lang="uk">
 <head>
 <meta charset="UTF-8">
-<title>EXP Timer Test</title>
+<title>EXP Timer Supabase</title>
 <style>
 body { font-family: Arial; background: #1a1a2e; color:#fff; text-align:center; margin:0; }
 .container { margin:20px; }
@@ -21,7 +21,7 @@ input { width:50px; padding:3px; border-radius:5px; border:none; }
 </head>
 <body>
 
-<h1>EXP Timer Test</h1>
+<h1>EXP Timer Supabase</h1>
 
 <div class="container">
   <input id="newName" placeholder="Ім'я нового гравця">
@@ -37,7 +37,12 @@ input { width:50px; padding:3px; border-radius:5px; border:none; }
 <div id="players" class="players"></div>
 <audio id="alarm" src="https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg" preload="auto"></audio>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js/dist/supabase.umd.js"></script>
 <script>
+const SUPABASE_URL = 'ВАШ_PROJECT_URL'; // твій Supabase URL
+const SUPABASE_ANON_KEY = 'sb_publishable_GTPV803deiaeT6Tikf3HHg_IknudqlS';
+const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
 let timerData = {};
 let notified = {};
 
@@ -59,10 +64,17 @@ function createPlayer(name,p){
     `;
     document.getElementById("players").appendChild(div);
 
-    // кнопки точно працюють
-    div.querySelector(".pause-btn").onclick = ()=>{ p.time=getCurrentTime(p); p.running=false; };
-    div.querySelector(".resume-btn").onclick = ()=>{ p.start=Date.now(); p.running=true; };
-    div.querySelector(".add-btn").onclick = ()=>{
+    div.querySelector(".pause-btn").onclick = async ()=>{
+        p.time=getCurrentTime(p);
+        p.running=false;
+        await saveTimerSupabase(name,p);
+    };
+    div.querySelector(".resume-btn").onclick = async ()=>{
+        p.start=Date.now();
+        p.running=true;
+        await saveTimerSupabase(name,p);
+    };
+    div.querySelector(".add-btn").onclick = async ()=>{
         const val = parseInt(div.querySelector("input").value);
         if(!val) return;
         p.time=getCurrentTime(p)+val*60;
@@ -70,6 +82,7 @@ function createPlayer(name,p){
         div.querySelector("input").value="";
         notified[name]=false;
         div.classList.remove("expired");
+        await saveTimerSupabase(name,p);
     };
 }
 
@@ -78,27 +91,56 @@ function addNewPlayer(){
     const minutes = parseInt(document.getElementById("newMinutes").value);
     if(!name || !minutes) return;
 
-    if(timerData[name]) addTime(name, minutes*60);
-    else {
+    if(timerData[name]){
+        timerData[name].time += minutes*60;
+    } else {
         timerData[name]={time:minutes*60,running:true,start:Date.now()};
         createPlayer(name,timerData[name]);
     }
 
     document.getElementById("newName").value="";
     document.getElementById("newMinutes").value="";
+    saveTimerSupabase(name,timerData[name]);
 }
 
-function addTime(name, sec){
-    const p = timerData[name];
-    p.time=getCurrentTime(p)+sec;
-    p.start=Date.now();
-    const div = document.getElementById("player_"+name);
-    if(div) div.classList.remove("expired");
-    notified[name]=false;
+function pauseAll(){ 
+    for(let n in timerData){
+        timerData[n].time=getCurrentTime(timerData[n]);
+        timerData[n].running=false;
+        saveTimerSupabase(n,timerData[n]);
+    }
+}
+function resumeAll(){ 
+    for(let n in timerData){
+        timerData[n].start=Date.now();
+        timerData[n].running=true;
+        saveTimerSupabase(n,timerData[n]);
+    }
 }
 
-function pauseAll(){ for(let n in timerData){ timerData[n].time=getCurrentTime(timerData[n]); timerData[n].running=false; } }
-function resumeAll(){ for(let n in timerData){ timerData[n].start=Date.now(); timerData[n].running=true; } }
+async function saveTimerSupabase(name,p){
+    await supabase.from('timers').upsert({
+        name:name,
+        time:getCurrentTime(p),
+        running:p.running,
+        start:p.start
+    }, {onConflict:['name']});
+}
+
+async function loadTimersSupabase(){
+    const {data,error} = await supabase.from('timers').select('*');
+    if(error){ console.log(error); return; }
+    data.forEach(p=>{
+        if(!timerData[p.name]){
+            timerData[p.name]={time:p.time,running:p.running,start:p.start};
+            createPlayer(p.name,timerData[p.name]);
+        } else {
+            timerData[p.name].time=p.time;
+            timerData[p.name].running=p.running;
+            timerData[p.name].start=p.start;
+        }
+    });
+}
 
 function updateTimers(){
     for(let name in timerData){
@@ -118,6 +160,8 @@ document.getElementById("pauseAllBtn").onclick = pauseAll;
 document.getElementById("resumeAllBtn").onclick = resumeAll;
 
 setInterval(updateTimers,1000);
+setInterval(loadTimersSupabase,3000);
+loadTimersSupabase();
 </script>
 </body>
 </html>
