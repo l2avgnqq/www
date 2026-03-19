@@ -21,11 +21,14 @@ button { cursor:pointer; font-weight:bold; }
 
 .global { background:#34495e; color:white; }
 
+/* ✅ ВЕРТИКАЛЬНИЙ СПИСОК */
 .players {
-    display:grid;
-    grid-template-columns: repeat(3, 1fr);
+    display:flex;
+    flex-direction:column;
     gap:15px;
     padding:20px;
+    max-width:400px;
+    margin:0 auto;
 }
 
 .player {
@@ -35,13 +38,8 @@ button { cursor:pointer; font-weight:bold; }
     transition:0.3s;
 }
 
-.warning {
-    background:rgba(255,165,0,0.4);
-}
-
-.danger {
-    background:rgba(255,0,0,0.5);
-}
+.warning { background:rgba(255,165,0,0.4); }
+.danger { background:rgba(255,0,0,0.5); }
 
 .pause { background:#f39c12; }
 .resume { background:#2ecc71; }
@@ -92,6 +90,7 @@ let db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 let data = {};
 let lastTime = {};
+let totalAdenaGlobal = 0;
 
 function format(s){
     let m = Math.floor(s/60);
@@ -108,7 +107,7 @@ function current(p){
 }
 
 async function updateAdena(){
-    let total = 0;
+    let total = totalAdenaGlobal;
 
     for(let name in data){
         let p = data[name];
@@ -121,6 +120,8 @@ async function updateAdena(){
                 let gained = Math.floor(diff * ADENA_PER_SEC);
                 p.adena = (p.adena || 0) + gained;
 
+                totalAdenaGlobal += gained;
+
                 await db.from("timers").update({
                     adena: p.adena
                 }).eq("name", name);
@@ -128,7 +129,6 @@ async function updateAdena(){
         }
 
         lastTime[name] = now;
-        total += (p.adena || 0);
     }
 
     document.getElementById("adena").innerText =
@@ -141,7 +141,6 @@ function render(){
 
     let arr = Object.entries(data);
 
-    // 🔥 сортування по часу (менше → вверх)
     arr.sort((a,b)=> current(a[1]) - current(b[1]));
 
     arr.forEach(([name,p])=>{
@@ -150,7 +149,7 @@ function render(){
 
         let t = current(p);
 
-        if(t <= 300 && t > 0) div.classList.add("warning"); // 5 хв
+        if(t <= 300 && t > 0) div.classList.add("warning");
         if(t === 0) div.classList.add("danger");
 
         div.innerHTML = `
@@ -181,7 +180,7 @@ function render(){
 
         div.querySelector(".add").onclick = async ()=>{
             let val = parseInt(div.querySelector("input").value);
-            if(!val) return;
+            if(isNaN(val) || val <= 0) return;
 
             p.time = current(p) + val*60;
             p.start = new Date().toISOString();
@@ -191,6 +190,14 @@ function render(){
         };
 
         div.querySelector(".delete").onclick = async ()=>{
+            let p = data[name];
+
+            if(p && p.adena){
+                totalAdenaGlobal += p.adena;
+            }
+
+            delete data[name];
+
             await db.from("timers").delete().eq("name", name);
         };
     });
@@ -219,7 +226,7 @@ async function add(){
     const name = document.getElementById("name").value;
     const min = parseInt(document.getElementById("minutes").value);
 
-    if(!name || !min) return;
+    if(!name || isNaN(min) || min <= 0) return;
 
     if(data[name]){
         let p = data[name];
@@ -243,7 +250,7 @@ async function add(){
 
 async function addAll(){
     let min = parseInt(document.getElementById("allMinutes").value);
-    if(!min) return;
+    if(isNaN(min) || min <= 0) return;
 
     for(let name in data){
         let p = data[name];
