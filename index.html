@@ -2,7 +2,7 @@
 <html lang="uk">
 <head>
 <meta charset="UTF-8">
-<title>EXP</title>
+<title>EXP Reborn</title>
 
 <style>
 body { font-family: Arial; background:#1a1a2e; color:#fff; text-align:center; }
@@ -39,6 +39,12 @@ button { cursor:pointer; font-weight:bold; }
 .delete { background:#c0392b; color:white; }
 
 .expired { background:rgba(255,0,0,0.4); }
+
+#adena {
+    font-size:20px;
+    margin-top:20px;
+    color:#f1c40f;
+}
 </style>
 
 </head>
@@ -57,7 +63,7 @@ button { cursor:pointer; font-weight:bold; }
 
 <div id="players" class="players"></div>
 
-<audio id="alarm" src="https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg"></audio>
+<div id="adena">💰 Adena: 0</div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 
@@ -67,17 +73,11 @@ button { cursor:pointer; font-weight:bold; }
 const SUPABASE_URL = "https://mxwtlfkhykqegzytotlq.supabase.co";
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im14d3RsZmtoeWtxZWd6eXRvdGxxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM5MDI0NDIsImV4cCI6MjA4OTQ3ODQ0Mn0.S5riWE26dEnXANPF070BYmoUDqHgMyPcue-KRr-ugvE';
 
-let db;
+const ADENA_PER_HOUR = 12000000;
 
-function wait(){
-    if(window.supabase){
-        db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-        init();
-    } else setTimeout(wait,100);
-}
+let db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 let data = {};
-let notified = {};
 
 function format(s){
     let m = Math.floor(s/60);
@@ -93,6 +93,19 @@ function current(p){
     if(isNaN(diff)) return p.time;
 
     return Math.max(0, p.time - diff);
+}
+
+function calcAdena(){
+    let totalSec = 0;
+
+    for(let name in data){
+        totalSec += current(data[name]);
+    }
+
+    let adena = (totalSec / 3600) * ADENA_PER_HOUR;
+
+    document.getElementById("adena").innerText =
+        "💰 Adena: " + Math.floor(adena).toLocaleString();
 }
 
 function create(name){
@@ -139,44 +152,27 @@ function create(name){
         p.start = new Date().toISOString();
         p.running = true;
 
-        notified[name]=false;
-        div.classList.remove("expired");
-
         await save(name,p);
     };
 
     div.querySelector(".delete").onclick = async ()=>{
-        if(!confirm("Видалити " + name + "?")) return;
-
         await db.from("timers").delete().eq("name", name);
-
-        delete data[name];
-        div.remove();
     };
 }
 
 async function save(name,p){
-    if(!p.start && p.running){
-        p.start = new Date().toISOString();
-    }
-
-    const { error } = await db.from("timers").upsert({
+    await db.from("timers").upsert({
         name:name,
         time:p.time,
         running:p.running,
         start:p.start
     });
-
-    if(error) console.log("SAVE ERROR:", error);
 }
 
 async function load(){
     const {data:rows} = await db.from("timers").select("*");
 
     rows.forEach(p=>{
-        if(!p.start && p.running){
-            p.start = new Date().toISOString();
-        }
         data[p.name]=p;
         create(p.name);
     });
@@ -188,21 +184,13 @@ function update(){
         let t = current(p);
 
         let el = document.querySelector("#"+name+" .time");
-        let div = document.getElementById(name);
 
         if(el){
             el.innerText = format(t);
-
-            if(t===0){
-                div.classList.add("expired");
-
-                if(!notified[name]){
-                    document.getElementById("alarm").play();
-                    notified[name]=true;
-                }
-            }
         }
     }
+
+    calcAdena();
 }
 
 async function add(){
@@ -251,26 +239,28 @@ function resumeAll(){
 }
 
 async function clearAll(){
-    if(!confirm("Очистити ВСІХ?")) return;
-
-    await db.from("timers").delete().neq("name", "");
-
-    data = {};
-    document.getElementById("players").innerHTML = "";
+    await db.from("timers").delete().neq("name","");
 }
 
-function init(){
-    document.getElementById("addBtn").onclick = add;
-    document.getElementById("pauseAll").onclick = pauseAll;
-    document.getElementById("resumeAll").onclick = resumeAll;
-    document.getElementById("clearAll").onclick = clearAll;
-
-    load();
-    setInterval(update,1000);
-    setInterval(load,2000);
+function initRealtime(){
+    db.channel("timers")
+    .on("postgres_changes",
+        { event: "*", schema: "public", table: "timers" },
+        payload => {
+            load(); // 🔥 миттєве оновлення
+        }
+    )
+    .subscribe();
 }
 
-wait();
+document.getElementById("addBtn").onclick = add;
+document.getElementById("pauseAll").onclick = pauseAll;
+document.getElementById("resumeAll").onclick = resumeAll;
+document.getElementById("clearAll").onclick = clearAll;
+
+load();
+initRealtime();
+setInterval(update,1000);
 
 })();
 </script>
