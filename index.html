@@ -5,7 +5,16 @@
 <title>EXP Lineage2</title>
 
 <style>
-body { font-family: Arial; background:#1a1a2e; color:#fff; text-align:left; }
+body {
+    font-family: Arial;
+    background:#1a1a2e;
+    color:#fff;
+}
+
+/* 🔹 ВЕРХ ПО ЦЕНТРУ */
+.top {
+    text-align:center;
+}
 
 input, button {
     padding:6px;
@@ -21,7 +30,7 @@ button { cursor:pointer; font-weight:bold; }
 
 .global { background:#34495e; color:white; }
 
-/* ⬅️ тепер зліва */
+/* 🔹 СПИСОК ЗЛІВА */
 .players {
     display:flex;
     flex-direction:column;
@@ -31,7 +40,7 @@ button { cursor:pointer; font-weight:bold; }
     align-items:flex-start;
 }
 
-/* рядок як Excel */
+/* 🔹 РЯДОК ЯК ТАБЛИЦЯ */
 .player {
     display:flex;
     align-items:center;
@@ -55,28 +64,31 @@ button { cursor:pointer; font-weight:bold; }
     font-size:22px;
     margin-top:20px;
     color:#f1c40f;
+    padding-left:20px;
 }
 </style>
 </head>
 
 <body>
 
-<h1>EXP Lineaage2</h1>
+<div class="top">
+    <h1>EXP Lineaage2</h1>
 
-<input id="name" placeholder="Ім'я">
-<input id="minutes" type="number" placeholder="Хв">
-<button id="addBtn">Додати</button>
+    <input id="name" placeholder="Ім'я">
+    <input id="minutes" type="number" placeholder="Хв">
+    <button id="addBtn">Додати</button>
 
-<br>
+    <br>
 
-<input id="allMinutes" type="number" placeholder="+хв всім">
-<button id="addAllBtn">Додати всім</button>
+    <input id="allMinutes" type="number" placeholder="+хв всім">
+    <button id="addAllBtn">Додати всім</button>
 
-<br>
+    <br>
 
-<button id="pauseAll" class="global">⏸ Пауза всім</button>
-<button id="resumeAll" class="global">▶ Старт всім</button>
-<button id="clearAll" class="global">🧹 Очистити всіх</button>
+    <button id="pauseAll" class="global">⏸ Пауза всім</button>
+    <button id="resumeAll" class="global">▶ Старт всім</button>
+    <button id="clearAll" class="global">🧹 Очистити всіх</button>
+</div>
 
 <div id="players" class="players"></div>
 
