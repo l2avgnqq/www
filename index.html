@@ -4,71 +4,96 @@
 <meta charset="UTF-8">
 <title>EXP Lineage2</title>
 
-<!-- НАДІЙНИЙ CDN -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
 <style>
-body { background:#111; color:#fff; font-family:Arial; }
-button { margin:5px; padding:5px; cursor:pointer; }
+body { background:#1a1a2e; color:#fff; font-family:Arial; }
+input, button { padding:6px; margin:4px; border-radius:6px; border:none; }
+button { cursor:pointer; }
+.player { padding:6px; border-bottom:1px solid #444; }
 </style>
 </head>
 
 <body>
+
+<h2>EXP Timer</h2>
 
 <input id="name" placeholder="Ім'я">
 <input id="minutes" type="number" placeholder="Хв">
 <button id="addBtn">Додати</button>
 
 <div id="players"></div>
+<div id="adena">💰 0</div>
 
 <script>
 
-// ---------- ПЕРЕВІРКА SUPABASE ----------
-if(typeof supabase === "undefined"){
-    alert("❌ Supabase не підключився");
-}
+// ❗ ВСТАВ СВІЙ КЛЮЧ СЮДИ
+const SUPABASE_URL = "https://mxwtlfkhykqegzytotlq.supabase.co";
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im14d3RsZmtoeWtxZWd6eXRvdGxxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM5MDI0NDIsImV4cCI6MjA4OTQ3ODQ0Mn0.S5riWE26dEnXANPF070BYmoUDqHgMyPcue-KRr-ugvE';
 
-// ---------- ПІДКЛЮЧЕННЯ ----------
-const db = supabase.createClient(
-    "https://mxwtlfkhykqegzytotlq.supabase.co",
-    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im14d3RsZmtoeWtxZWd6eXRvdGxxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM5MDI0NDIsImV4cCI6MjA4OTQ3ODQ0Mn0.S5riWE26dEnXANPF070BYmoUDqHgMyPcue-KRr-ugvE";
-);
+const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-// ---------- ДАНІ ----------
+const ADENA_PER_SEC = 12000000 / 3600;
+
 let data = {};
 
-// ---------- LOAD ----------
+/* ---------- CORE ---------- */
+function updatePlayer(p){
+    if(!p.running) return;
+
+    let last = new Date(p.last_update);
+    let now = new Date();
+
+    let diff = Math.floor((now - last)/1000);
+    if(diff <= 0) return;
+
+    let worked = Math.min(diff, p.time);
+
+    p.time -= worked;
+    p.adena += worked * ADENA_PER_SEC;
+    p.last_update = now.toISOString();
+
+    if(p.time <= 0){
+        p.time = 0;
+        p.running = false;
+    }
+}
+
+/* ---------- LOAD ---------- */
 async function load(){
     try{
-        let res = await db.from("timers").select("*");
+        let {data:rows, error} = await db.from("timers").select("*");
 
-        if(res.error){
-            console.log("DB ERROR:", res.error);
+        if(error){
+            console.log("LOAD ERROR:", error);
             return;
         }
 
-        data = {};
-
-        res.data.forEach(p=>{
-            data[p.name] = p;
+        let obj = {};
+        rows.forEach(p=>{
+            obj[p.name] = {
+                name:p.name,
+                time:Number(p.time)||0,
+                running:p.running,
+                adena:Number(p.adena)||0,
+                last_update:p.last_update
+            };
         });
 
-        render();
+        data = obj;
 
     }catch(e){
         console.log("LOAD CRASH:", e);
     }
 }
 
-// ---------- SAVE ----------
+/* ---------- SAVE ---------- */
 async function save(p){
     try{
-        let res = await db.from("timers").upsert(p);
+        let {error} = await db.from("timers").upsert(p);
 
-        if(res.error){
-            console.log("SAVE ERROR:", res.error);
-        } else {
-            console.log("OK SAVE");
+        if(error){
+            console.log("SAVE ERROR:", error);
         }
 
     }catch(e){
@@ -76,70 +101,99 @@ async function save(p){
     }
 }
 
-// ---------- RENDER ----------
+/* ---------- RENDER ---------- */
 function render(){
-    let div = document.getElementById("players");
-    div.innerHTML = "";
+    let container = document.getElementById("players");
+    container.innerHTML = "";
 
-    for(let name in data){
-        let p = data[name];
+    let total = 0;
 
-        div.innerHTML += `
-            <div>
-                <b>${name}</b> | ${p.time}
+    Object.values(data).forEach(p=>{
+        updatePlayer(p);
+        total += p.adena;
 
-                <button onclick="pause('${name}')">⏸</button>
-                <button onclick="resume('${name}')">▶</button>
-                <button onclick="del('${name}')">❌</button>
-            </div>
+        let div = document.createElement("div");
+        div.className = "player";
+
+        div.innerHTML = `
+            <b>${p.name}</b>
+            ${Math.floor(p.time/60)}:${(p.time%60).toString().padStart(2,"0")}
+            💰 ${Math.floor(p.adena)}
+
+            <button onclick="pause('${p.name}')">⏸</button>
+            <button onclick="resume('${p.name}')">▶</button>
+            <button onclick="delPlayer('${p.name}')">❌</button>
         `;
-    }
+
+        container.appendChild(div);
+    });
+
+    document.getElementById("adena").innerText =
+        "💰 " + Math.floor(total).toLocaleString();
 }
 
-// ---------- ACTIONS ----------
-async function add(){
-    console.log("CLICK ADD");
+/* ---------- ACTIONS ---------- */
 
+async function add(){
     let name = document.getElementById("name").value.trim();
     let min = parseInt(document.getElementById("minutes").value);
 
     if(!name || !min) return;
 
-    let p = {
+    let p = data[name] || {
         name:name,
-        time:min*60,
-        running:true,
+        time:0,
         adena:0,
+        running:false,
         last_update:new Date().toISOString()
     };
 
+    updatePlayer(p);
+
+    p.time += min*60;
+    p.running = true;
+    p.last_update = new Date().toISOString();
+
+    data[name] = p;
+
     await save(p);
-    await load();
 }
 
 async function pause(name){
     let p = data[name];
+    updatePlayer(p);
     p.running = false;
     await save(p);
-    await load();
 }
 
 async function resume(name){
     let p = data[name];
     p.running = true;
+    p.last_update = new Date().toISOString();
     await save(p);
-    await load();
 }
 
-async function del(name){
-    await db.from("timers").delete().eq("name", name);
-    await load();
+async function delPlayer(name){
+    try{
+        await db.from("timers").delete().eq("name", name);
+    }catch(e){
+        console.log(e);
+    }
+
+    delete data[name];
 }
 
-// ---------- INIT ----------
+/* ---------- INIT ---------- */
+
 document.getElementById("addBtn").onclick = add;
 
-load();
+async function init(){
+    await load();
+    render();
+}
+
+init();
+setInterval(render,1000);
 
 </script>
 
