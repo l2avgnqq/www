@@ -90,7 +90,12 @@ let alerted = {};
 
 /* ---------- CORE ---------- */
 function updatePlayer(p){
-    if(!p.running) return;
+
+    if(!p.running){
+        // 🔥 ФІКС: щоб не було "догону" після reload
+        p.last_update = new Date().toISOString();
+        return;
+    }
 
     let last = new Date(p.last_update);
     let now = new Date();
@@ -115,13 +120,22 @@ async function load(){
     let {data:rows} = await db.from("timers").select("*");
 
     let obj = {};
+
     rows.forEach(p=>{
+
+        let last = p.last_update;
+
+        // 🔥 КЛЮЧОВИЙ ФІКС
+        if(!p.running){
+            last = new Date().toISOString();
+        }
+
         obj[p.name] = {
             name:p.name,
             time:Number(p.time)||0,
             running:p.running,
             adena:Number(p.adena)||0,
-            last_update:p.last_update
+            last_update:last
         };
     });
 
