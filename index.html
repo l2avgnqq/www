@@ -23,10 +23,7 @@ button { cursor:pointer; font-weight:bold; }
 #addAllBtn { background:#9b59b6; color:white; }
 .global { background:#34495e; color:white; }
 
-.players {
-    padding:20px;
-    max-width:700px;
-}
+.players { padding:20px; max-width:700px; }
 
 .player {
     display:flex;
@@ -39,9 +36,7 @@ button { cursor:pointer; font-weight:bold; }
 .warning { background:rgba(255,165,0,0.3); }
 .danger { background:rgba(255,0,0,0.4); }
 
-@keyframes blink {
-    50% {opacity:0.3;}
-}
+@keyframes blink { 50% {opacity:0.3;} }
 
 #adena {
     font-size:22px;
@@ -78,8 +73,7 @@ button { cursor:pointer; font-weight:bold; }
 
 <script>
 const SUPABASE_URL = "https://mxwtlfkhykqegzytotlq.supabase.co";
-const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im14d3RsZmtoeWtxZWd6eXRvdGxxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM5MDI0NDIsImV4cCI6MjA4OTQ3ODQ0Mn0.S5riWE26dEnXANPF070BYmoUDqHgMyPcue-KRr-ugvE";
-
+const SUPABASE_KEY = const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im14d3RsZmtoeWtxZWd6eXRvdGxxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM5MDI0NDIsImV4cCI6MjA4OTQ3ODQ0Mn0.S5riWE26dEnXANPF070BYmoUDqHgMyPcue-KRr-ugvE';
 const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const ADENA_PER_SEC = 12000000 / 3600;
@@ -112,11 +106,9 @@ function updatePlayer(p){
 /* ---------- LOAD ---------- */
 async function load(){
     let res = await db.from("timers").select("*");
-
     if(!res.data) return;
 
     let obj = {};
-
     res.data.forEach(p=>{
         obj[p.name] = {
             name:p.name,
@@ -153,7 +145,6 @@ function render(){
     let arr = Object.entries(data).sort((a,b)=> a[1].time - b[1].time);
 
     arr.forEach(([name,p], index)=>{
-
         total += p.adena;
 
         if(p.time === 0 && !alerted[name]){
