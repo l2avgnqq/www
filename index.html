@@ -7,27 +7,77 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
 <style>
-body { background:#1a1a2e; color:#fff; font-family:Arial; }
-input, button { padding:6px; margin:4px; border-radius:6px; border:none; }
-button { cursor:pointer; }
-.player { padding:6px; border-bottom:1px solid #444; }
+body { font-family: Arial; background:#1a1a2e; color:#fff; }
+.top { text-align:center; }
+
+input, button {
+    padding:6px;
+    margin:3px;
+    border-radius:6px;
+    border:none;
+}
+
+button { cursor:pointer; font-weight:bold; }
+
+#addBtn { background:#e74c3c; color:white; }
+#addAllBtn { background:#9b59b6; color:white; }
+.global { background:#34495e; color:white; }
+
+.players {
+    padding:20px;
+    max-width:700px;
+}
+
+.player {
+    display:flex;
+    align-items:center;
+    gap:10px;
+    padding:8px;
+    border-bottom:1px solid rgba(255,255,255,0.2);
+}
+
+.warning { background:rgba(255,165,0,0.3); }
+.danger { background:rgba(255,0,0,0.4); }
+
+@keyframes blink {
+    50% {opacity:0.3;}
+}
+
+#adena {
+    font-size:22px;
+    margin-top:20px;
+    color:#f1c40f;
+    padding-left:20px;
+}
 </style>
 </head>
 
 <body>
 
-<h2>EXP Timer</h2>
+<div class="top">
+    <h1>EXP Lineage2</h1>
 
-<input id="name" placeholder="Ім'я">
-<input id="minutes" type="number" placeholder="Хв">
-<button id="addBtn">Додати</button>
+    <input id="name" placeholder="Ім'я">
+    <input id="minutes" type="number" placeholder="Хв">
+    <button id="addBtn">Додати</button>
 
-<div id="players"></div>
+    <br>
+
+    <input id="allMinutes" type="number" placeholder="+хв всім">
+    <button id="addAllBtn">Додати всім</button>
+
+    <br>
+
+    <button id="pauseAll" class="global">⏸ Пауза всім</button>
+    <button id="resumeAll" class="global">▶ Старт всім</button>
+    <button id="clearAll" class="global">🧹 Очистити всіх</button>
+</div>
+
+<div id="players" class="players"></div>
 <div id="adena">💰 0</div>
 
 <script>
 
-// ❗ ВСТАВ СВІЙ КЛЮЧ СЮДИ
 const SUPABASE_URL = "https://mxwtlfkhykqegzytotlq.supabase.co";
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im14d3RsZmtoeWtxZWd6eXRvdGxxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM5MDI0NDIsImV4cCI6MjA4OTQ3ODQ0Mn0.S5riWE26dEnXANPF070BYmoUDqHgMyPcue-KRr-ugvE';
 
@@ -36,6 +86,7 @@ const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 const ADENA_PER_SEC = 12000000 / 3600;
 
 let data = {};
+let alerted = {};
 
 /* ---------- CORE ---------- */
 function updatePlayer(p){
@@ -61,75 +112,85 @@ function updatePlayer(p){
 
 /* ---------- LOAD ---------- */
 async function load(){
-    try{
-        let {data:rows, error} = await db.from("timers").select("*");
+    let {data:rows} = await db.from("timers").select("*");
 
-        if(error){
-            console.log("LOAD ERROR:", error);
-            return;
-        }
+    let obj = {};
+    rows.forEach(p=>{
+        obj[p.name] = {
+            name:p.name,
+            time:Number(p.time)||0,
+            running:p.running,
+            adena:Number(p.adena)||0,
+            last_update:p.last_update
+        };
+    });
 
-        let obj = {};
-        rows.forEach(p=>{
-            obj[p.name] = {
-                name:p.name,
-                time:Number(p.time)||0,
-                running:p.running,
-                adena:Number(p.adena)||0,
-                last_update:p.last_update
-            };
-        });
-
-        data = obj;
-
-    }catch(e){
-        console.log("LOAD CRASH:", e);
-    }
+    data = obj;
 }
+
+/* ---------- REALTIME ---------- */
+db.channel("timers")
+.on("postgres_changes",
+{ event:"*", schema:"public", table:"timers" },
+()=> load())
+.subscribe();
 
 /* ---------- SAVE ---------- */
 async function save(p){
-    try{
-        let {error} = await db.from("timers").upsert(p);
+    await db.from("timers").upsert(p);
+}
 
-        if(error){
-            console.log("SAVE ERROR:", error);
-        }
-
-    }catch(e){
-        console.log("SAVE CRASH:", e);
-    }
+/* ---------- FORMAT ---------- */
+function format(s){
+    let m = Math.floor(s/60);
+    let sec = s%60;
+    return m + ":" + sec.toString().padStart(2,"0");
 }
 
 /* ---------- RENDER ---------- */
 function render(){
-    let container = document.getElementById("players");
+    const container = document.getElementById("players");
     container.innerHTML = "";
 
     let total = 0;
 
-    Object.values(data).forEach(p=>{
-        updatePlayer(p);
+    Object.values(data).forEach(p=> updatePlayer(p));
+
+    let arr = Object.values(data).sort((a,b)=> a.time - b.time);
+
+    arr.forEach((p, index)=>{
+
         total += p.adena;
 
-        let div = document.createElement("div");
+        const div = document.createElement("div");
         div.className = "player";
 
+        if(p.time <= 300 && p.time > 60) div.classList.add("warning");
+        if(p.time <= 60 && p.time > 0){
+            div.classList.add("danger");
+            div.style.animation = "blink 1s infinite";
+        }
+
         div.innerHTML = `
-            <b>${p.name}</b>
-            ${Math.floor(p.time/60)}:${(p.time%60).toString().padStart(2,"0")}
-            💰 ${Math.floor(p.adena)}
+            <span style="width:30px;">${index+1}.</span>
+            <span style="width:120px;"><b>${p.name}</b></span>
+            <span style="width:80px;">${format(p.time)}</span>
+            <span style="width:140px;">💰 ${Math.floor(p.adena).toLocaleString()}</span>
 
             <button onclick="pause('${p.name}')">⏸</button>
             <button onclick="resume('${p.name}')">▶</button>
-            <button onclick="delPlayer('${p.name}')">❌</button>
+
+            <input type="number" id="add_${p.name}" placeholder="+хв" style="width:60px;">
+            <button onclick="addTime('${p.name}')">+</button>
+
+            <button onclick="del('${p.name}')">❌</button>
         `;
 
         container.appendChild(div);
     });
 
     document.getElementById("adena").innerText =
-        "💰 " + Math.floor(total).toLocaleString();
+        "💰 Adena: " + Math.floor(total).toLocaleString();
 }
 
 /* ---------- ACTIONS ---------- */
@@ -137,16 +198,9 @@ function render(){
 async function add(){
     let name = document.getElementById("name").value.trim();
     let min = parseInt(document.getElementById("minutes").value);
-
     if(!name || !min) return;
 
-    let p = data[name] || {
-        name:name,
-        time:0,
-        adena:0,
-        running:false,
-        last_update:new Date().toISOString()
-    };
+    let p = data[name] || {name:name, time:0, adena:0};
 
     updatePlayer(p);
 
@@ -155,37 +209,100 @@ async function add(){
     p.last_update = new Date().toISOString();
 
     data[name] = p;
+    await save(p);
+}
+
+async function addTime(name){
+    let val = parseInt(document.getElementById("add_"+name).value);
+    if(!val) return;
+
+    let p = data[name];
+
+    updatePlayer(p);
+
+    p.time += val*60;
+    p.running = true;
+    p.last_update = new Date().toISOString();
 
     await save(p);
 }
 
 async function pause(name){
     let p = data[name];
-    updatePlayer(p);
+
+    updatePlayer(p);   // 🔥 фіксуємо
     p.running = false;
+    p.last_update = new Date().toISOString(); // 🔥 ГОЛОВНИЙ ФІКС
+
     await save(p);
 }
 
 async function resume(name){
     let p = data[name];
+
     p.running = true;
     p.last_update = new Date().toISOString();
+
     await save(p);
 }
 
-async function delPlayer(name){
-    try{
-        await db.from("timers").delete().eq("name", name);
-    }catch(e){
-        console.log(e);
-    }
-
+async function del(name){
+    await db.from("timers").delete().eq("name", name);
     delete data[name];
+}
+
+async function addAll(){
+    let min = parseInt(document.getElementById("allMinutes").value);
+    if(!min) return;
+
+    for(let name in data){
+        let p = data[name];
+
+        updatePlayer(p);
+
+        p.time += min*60;
+        p.running = true;
+        p.last_update = new Date().toISOString();
+
+        await save(p);
+    }
+}
+
+async function pauseAll(){
+    for(let name in data){
+        let p = data[name];
+
+        updatePlayer(p);
+        p.running = false;
+        p.last_update = new Date().toISOString(); // 🔥 ФІКС
+
+        await save(p);
+    }
+}
+
+async function resumeAll(){
+    for(let name in data){
+        let p = data[name];
+
+        p.running = true;
+        p.last_update = new Date().toISOString();
+
+        await save(p);
+    }
+}
+
+async function clearAll(){
+    await db.from("timers").delete().neq("name","");
+    data = {};
 }
 
 /* ---------- INIT ---------- */
 
 document.getElementById("addBtn").onclick = add;
+document.getElementById("addAllBtn").onclick = addAll;
+document.getElementById("pauseAll").onclick = pauseAll;
+document.getElementById("resumeAll").onclick = resumeAll;
+document.getElementById("clearAll").onclick = clearAll;
 
 async function init(){
     await load();
