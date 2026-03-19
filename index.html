@@ -276,27 +276,38 @@ async function addAll(){
         await save(p);
     }
 }
-
 async function pauseAll(){
-    for(let name in data){
-        let p = data[name];
+
+    let players = Object.values(data); // 🔥 копія
+
+    let updates = players.map(p => {
 
         updatePlayer(p);
+
         p.running = false;
         p.last_update = new Date().toISOString();
 
-        await save(p);
+        return save(p);
+    });
+
+    await Promise.all(updates); // 🔥 чекаємо ВСІХ
+
+    await load(); // 🔥 оновлюємо після
     }
 }
 
 async function resumeAll(){
-    for(let name in data){
-        let p = data[name];
 
+    let players = Object.values(data);
+
+    let updates = players.map(p => {
         p.running = true;
         p.last_update = new Date().toISOString();
+        return save(p);
+    });
 
-        await save(p);
+    await Promise.all(updates);
+    await load();
     }
 }
 
