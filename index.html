@@ -122,20 +122,12 @@ async function load(){
     let obj = {};
 
     rows.forEach(p=>{
-
-        let last = p.last_update;
-
-        // 🔥 КЛЮЧОВИЙ ФІКС
-        if(!p.running){
-            last = new Date().toISOString();
-        }
-
         obj[p.name] = {
             name:p.name,
             time:Number(p.time)||0,
             running:p.running,
             adena:Number(p.adena)||0,
-            last_update:last
+            last_update:p.last_update
         };
     });
 
@@ -281,14 +273,26 @@ async function addAll(){
         await save(p);
     }
 }
-async function syncAll(){
-    for(let name in data){
-        let p = data[name];
+async function updatePlayer(p){
 
-        if(!p.running){
-            p.last_update = new Date().toISOString();
-            await save(p);
-        }
+    // ❗ ПОВНИЙ СТОП
+    if(!p.running) return;
+
+    let last = new Date(p.last_update);
+    let now = new Date();
+
+    let diff = Math.floor((now - last)/1000);
+    if(diff <= 0) return;
+
+    let worked = Math.min(diff, p.time);
+
+    p.time -= worked;
+    p.adena += worked * ADENA_PER_SEC;
+    p.last_update = now.toISOString();
+
+    if(p.time <= 0){
+        p.time = 0;
+        p.running = false;
     }
 }
 async function pauseAll(){
