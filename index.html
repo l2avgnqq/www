@@ -117,12 +117,17 @@ function createPlayer(name){
 }
 
 async function save(name,p){
-    await client.from('timers').upsert({
+    async function save(name,p){
+    const { error } = await client.from('timers').upsert({
         name: name,
         time: p.time,
         running: p.running,
         start: p.start
     });
+
+    if(error){
+        console.log("SAVE ERROR:", error);
+    }
 }
 
 async function load(){
