@@ -2,7 +2,7 @@
 <html lang="uk">
 <head>
 <meta charset="UTF-8">
-<title>EXP LINEAGE2</title>
+<title>EXP Lineage2</title>
 
 <style>
 body { font-family: Arial; background:#1a1a2e; color:#fff; text-align:center; }
@@ -17,6 +17,7 @@ input, button {
 button { cursor:pointer; font-weight:bold; }
 
 #addBtn { background:#e74c3c; color:white; }
+#addAllBtn { background:#9b59b6; color:white; }
 
 .global { background:#34495e; color:white; }
 
@@ -31,6 +32,15 @@ button { cursor:pointer; font-weight:bold; }
     background:rgba(255,255,255,0.1);
     padding:10px;
     border-radius:10px;
+    transition:0.3s;
+}
+
+.warning {
+    background:rgba(255,165,0,0.4);
+}
+
+.danger {
+    background:rgba(255,0,0,0.5);
 }
 
 .pause { background:#f39c12; }
@@ -48,13 +58,19 @@ button { cursor:pointer; font-weight:bold; }
 
 <body>
 
-<h1>EXP LINEAGE2</h1>
+<h1>EXP Lineaage2</h1>
 
 <input id="name" placeholder="Ім'я">
 <input id="minutes" type="number" placeholder="Хв">
 <button id="addBtn">Додати</button>
 
 <br>
+
+<input id="allMinutes" type="number" placeholder="+хв всім">
+<button id="addAllBtn">Додати всім</button>
+
+<br>
+
 <button id="pauseAll" class="global">⏸ Пауза всім</button>
 <button id="resumeAll" class="global">▶ Старт всім</button>
 <button id="clearAll" class="global">🧹 Очистити всіх</button>
@@ -88,8 +104,6 @@ function current(p){
     if(!p.start) return p.time;
 
     let diff = Math.floor((Date.now() - new Date(p.start)) / 1000);
-    if(isNaN(diff)) return p.time;
-
     return Math.max(0, p.time - diff);
 }
 
@@ -105,10 +119,8 @@ async function updateAdena(){
 
             if(diff > 0){
                 let gained = Math.floor(diff * ADENA_PER_SEC);
-
                 p.adena = (p.adena || 0) + gained;
 
-                // 🔥 збереження
                 await db.from("timers").update({
                     adena: p.adena
                 }).eq("name", name);
@@ -123,56 +135,65 @@ async function updateAdena(){
         "💰 Adena: " + total.toLocaleString();
 }
 
-function create(name){
-    if(document.getElementById(name)) return;
+function render(){
+    const container = document.getElementById("players");
+    container.innerHTML = "";
 
-    const div = document.createElement("div");
-    div.id = name;
-    div.className = "player";
+    let arr = Object.entries(data);
 
-    div.innerHTML = `
-        <b>${name}</b> <button class="delete">❌</button><br>
-        <span class="time">0:00</span><br><br>
+    // 🔥 сортування по часу (менше → вверх)
+    arr.sort((a,b)=> current(a[1]) - current(b[1]));
 
-        <button class="pause">⏸</button>
-        <button class="resume">▶</button><br><br>
+    arr.forEach(([name,p])=>{
+        const div = document.createElement("div");
+        div.className = "player";
 
-        <input type="number" placeholder="+хв">
-        <button class="add">+</button>
-    `;
+        let t = current(p);
 
-    document.getElementById("players").appendChild(div);
+        if(t <= 300 && t > 0) div.classList.add("warning"); // 5 хв
+        if(t === 0) div.classList.add("danger");
 
-    div.querySelector(".pause").onclick = async ()=>{
-        let p = data[name];
-        p.time = current(p);
-        p.running = false;
-        p.start = null;
-        await save(name,p);
-    };
+        div.innerHTML = `
+            <b>${name}</b> <button class="delete">❌</button><br>
+            <span>${format(t)}</span><br><br>
 
-    div.querySelector(".resume").onclick = async ()=>{
-        let p = data[name];
-        p.start = new Date().toISOString();
-        p.running = true;
-        await save(name,p);
-    };
+            <button class="pause">⏸</button>
+            <button class="resume">▶</button><br><br>
 
-    div.querySelector(".add").onclick = async ()=>{
-        let val = parseInt(div.querySelector("input").value);
-        if(!val) return;
+            <input type="number" placeholder="+хв">
+            <button class="add">+</button>
+        `;
 
-        let p = data[name];
-        p.time = current(p) + val*60;
-        p.start = new Date().toISOString();
-        p.running = true;
+        container.appendChild(div);
 
-        await save(name,p);
-    };
+        div.querySelector(".pause").onclick = async ()=>{
+            p.time = current(p);
+            p.running = false;
+            p.start = null;
+            await save(name,p);
+        };
 
-    div.querySelector(".delete").onclick = async ()=>{
-        await db.from("timers").delete().eq("name", name);
-    };
+        div.querySelector(".resume").onclick = async ()=>{
+            p.start = new Date().toISOString();
+            p.running = true;
+            await save(name,p);
+        };
+
+        div.querySelector(".add").onclick = async ()=>{
+            let val = parseInt(div.querySelector("input").value);
+            if(!val) return;
+
+            p.time = current(p) + val*60;
+            p.start = new Date().toISOString();
+            p.running = true;
+
+            await save(name,p);
+        };
+
+        div.querySelector(".delete").onclick = async ()=>{
+            await db.from("timers").delete().eq("name", name);
+        };
+    });
 }
 
 async function save(name,p){
@@ -181,7 +202,7 @@ async function save(name,p){
         time:p.time,
         running:p.running,
         start:p.start,
-        adena: p.adena || 0
+        adena:p.adena || 0
     });
 }
 
@@ -189,32 +210,9 @@ async function load(){
     const {data:rows} = await db.from("timers").select("*");
 
     let newData = {};
-
-    rows.forEach(p=>{
-        newData[p.name] = p;
-
-        if(!data[p.name]){
-            create(p.name);
-        }
-    });
-
-    for(let name in data){
-        if(!newData[name]){
-            let el = document.getElementById(name);
-            if(el) el.remove();
-        }
-    }
+    rows.forEach(p=> newData[p.name] = p);
 
     data = newData;
-}
-
-function updateUI(){
-    for(let name in data){
-        let t = current(data[name]);
-        let el = document.querySelector("#"+name+" .time");
-
-        if(el) el.innerText = format(t);
-    }
 }
 
 async function add(){
@@ -236,12 +234,24 @@ async function add(){
         time:min*60,
         running:true,
         start:new Date().toISOString(),
-        adena: 0
+        adena:0
     };
 
     data[name]=p;
-    create(name);
     await save(name,p);
+}
+
+async function addAll(){
+    let min = parseInt(document.getElementById("allMinutes").value);
+    if(!min) return;
+
+    for(let name in data){
+        let p = data[name];
+        p.time = current(p) + min*60;
+        p.start = new Date().toISOString();
+        p.running = true;
+        await save(name,p);
+    }
 }
 
 function pauseAll(){
@@ -266,18 +276,17 @@ function resumeAll(){
 async function clearAll(){
     await db.from("timers").delete().neq("name","");
     data = {};
-    lastTime = {};
-    document.getElementById("players").innerHTML = "";
 }
 
 document.getElementById("addBtn").onclick = add;
+document.getElementById("addAllBtn").onclick = addAll;
 document.getElementById("pauseAll").onclick = pauseAll;
 document.getElementById("resumeAll").onclick = resumeAll;
 document.getElementById("clearAll").onclick = clearAll;
 
-setInterval(load, 1000);
-setInterval(updateUI, 1000);
-setInterval(updateAdena, 1000);
+setInterval(load,1000);
+setInterval(render,1000);
+setInterval(updateAdena,1000);
 
 })();
 </script>
