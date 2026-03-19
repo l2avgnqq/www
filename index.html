@@ -260,6 +260,40 @@ async function delPlayer(name){
     delete data[name];
 }
 
+/* ---------- 🔥 ГОЛОВНИЙ ФІКС ---------- */
+
+async function pauseAll(){
+
+    let now = new Date().toISOString();
+
+    let updates = Object.values(data).map(p=>{
+        return db.from("timers").update({
+            running:false,
+            last_update:now
+        }).eq("name", p.name);
+    });
+
+    await Promise.all(updates);
+    await load();
+}
+
+async function resumeAll(){
+
+    let now = new Date().toISOString();
+
+    let updates = Object.values(data).map(p=>{
+        return db.from("timers").update({
+            running:true,
+            last_update:now
+        }).eq("name", p.name);
+    });
+
+    await Promise.all(updates);
+    await load();
+}
+
+/* ---------- OTHER ---------- */
+
 async function addAll(){
     let min = parseInt(document.getElementById("allMinutes").value);
     if(!min) return;
@@ -274,40 +308,6 @@ async function addAll(){
         p.last_update = new Date().toISOString();
 
         await save(p);
-    }
-}
-async function pauseAll(){
-
-    let players = Object.values(data); // 🔥 копія
-
-    let updates = players.map(p => {
-
-        updatePlayer(p);
-
-        p.running = false;
-        p.last_update = new Date().toISOString();
-
-        return save(p);
-    });
-
-    await Promise.all(updates); // 🔥 чекаємо ВСІХ
-
-    await load(); // 🔥 оновлюємо після
-    }
-}
-
-async function resumeAll(){
-
-    let players = Object.values(data);
-
-    let updates = players.map(p => {
-        p.running = true;
-        p.last_update = new Date().toISOString();
-        return save(p);
-    });
-
-    await Promise.all(updates);
-    await load();
     }
 }
 
