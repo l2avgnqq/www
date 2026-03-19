@@ -1,84 +1,3 @@
-<!DOCTYPE html>
-<html lang="uk">
-<head>
-<meta charset="UTF-8">
-<title>EXP Lineage2</title>
-
-<style>
-body { font-family: Arial; background:#1a1a2e; color:#fff; }
-.top { text-align:center; }
-
-input, button {
-    padding:6px;
-    margin:3px;
-    border-radius:6px;
-    border:none;
-}
-
-button { cursor:pointer; font-weight:bold; }
-
-#addBtn { background:#e74c3c; color:white; }
-#addAllBtn { background:#9b59b6; color:white; }
-.global { background:#34495e; color:white; }
-
-.players {
-    display:flex;
-    flex-direction:column;
-    padding:20px;
-    max-width:700px;
-}
-
-.player {
-    display:flex;
-    align-items:center;
-    gap:10px;
-    padding:8px;
-    border-bottom:1px solid rgba(255,255,255,0.2);
-}
-
-.warning { background:rgba(255,165,0,0.3); }
-.danger { background:rgba(255,0,0,0.4); }
-
-.pause { background:#f39c12; }
-.resume { background:#2ecc71; }
-.add { background:#3498db; }
-.delete { background:#c0392b; color:white; }
-
-#adena {
-    font-size:22px;
-    margin-top:20px;
-    color:#f1c40f;
-    padding-left:20px;
-}
-</style>
-</head>
-
-<body>
-
-<div class="top">
-    <h1>EXP Lineaage2</h1>
-
-    <input id="name" placeholder="Ім'я">
-    <input id="minutes" type="number" placeholder="Хв">
-    <button id="addBtn">Додати</button>
-
-    <br>
-
-    <input id="allMinutes" type="number" placeholder="+хв всім">
-    <button id="addAllBtn">Додати всім</button>
-
-    <br>
-
-    <button id="pauseAll" class="global">⏸ Пауза всім</button>
-    <button id="resumeAll" class="global">▶ Старт всім</button>
-    <button id="clearAll" class="global">🧹 Очистити всіх</button>
-</div>
-
-<div id="players" class="players"></div>
-<div id="adena">💰 Adena: 0</div>
-
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
 <script>
 const SUPABASE_URL = "https://mxwtlfkhykqegzytotlq.supabase.co";
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im14d3RsZmtoeWtxZWd6eXRvdGxxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM5MDI0NDIsImV4cCI6MjA4OTQ3ODQ0Mn0.S5riWE26dEnXANPF070BYmoUDqHgMyPcue-KRr-ugvE';
@@ -87,20 +6,25 @@ const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 const ADENA_PER_SEC = 12000000 / 3600;
 
 let data = {};
+let alerted = {}; // щоб звук не спамив
+
+/* ---------- SOUND ---------- */
+function playSound(){
+    const audio = new Audio("https://actions.google.com/sounds/v1/alarms/beep_short.ogg");
+    audio.play();
+}
 
 /* ---------- TIME ---------- */
 
 function format(s){
-    s = Number(s);
-    if(isNaN(s) || s < 0) s = 0;
-
+    s = Number(s)||0;
     let m = Math.floor(s/60);
     let sec = s % 60;
     return m + ":" + (sec<10?"0":"") + sec;
 }
 
 function current(p){
-    let base = Number(p.time) || 0;
+    let base = Number(p.time)||0;
 
     if(!p.running || !p.start) return base;
 
@@ -108,12 +32,19 @@ function current(p){
     return Math.max(0, base - diff);
 }
 
+/* ---------- FIXED ADENA ---------- */
+
 function getAdena(p){
-    let base = Number(p.adena) || 0;
+    let base = Number(p.adena)||0;
 
     if(!p.running || !p.start) return base;
 
     let diff = Math.floor((Date.now() - new Date(p.start))/1000);
+
+    // 🔥 обмеження
+    let max = Number(p.time)||0;
+    diff = Math.min(diff, max);
+
     return base + diff * ADENA_PER_SEC;
 }
 
@@ -139,14 +70,11 @@ async function load(){
 /* ---------- REALTIME ---------- */
 
 db.channel("timers")
-.on("postgres_changes",
-{
+.on("postgres_changes", {
     event:"*",
     schema:"public",
     table:"timers"
-}, payload=>{
-    load(); // 🔥 автооновлення
-})
+}, ()=> load())
 .subscribe();
 
 /* ---------- SAVE ---------- */
@@ -173,22 +101,41 @@ function render(){
     arr.sort((a,b)=> current(a[1]) - current(b[1]));
 
     arr.forEach(([name,p], index)=>{
-        let t = current(p);
-        let adenaNow = getAdena(p);
 
+        let t = current(p);
+
+        // 🔥 AUTO STOP
+        if(t === 0 && p.running){
+            p.time = 0;
+            p.adena = getAdena(p);
+            p.running = false;
+            p.start = null;
+            save(name,p);
+
+            if(!alerted[name]){
+                playSound();
+                alerted[name] = true;
+            }
+        }
+
+        let adenaNow = getAdena(p);
         total += adenaNow;
 
         const div = document.createElement("div");
         div.className = "player";
 
-        if(t <= 300 && t > 0) div.classList.add("warning");
-        if(t === 0) div.classList.add("danger");
+        // 🔥 COLORS
+        if(t <= 300 && t > 60) div.classList.add("warning");
+        if(t <= 60 && t > 0){
+            div.classList.add("danger");
+            div.style.animation = "blink 1s infinite";
+        }
 
         div.innerHTML = `
             <span style="width:30px;">${index+1}.</span>
             <span style="width:120px;"><b>${name}</b></span>
             <span style="width:80px;">${format(t)}</span>
-            <span style="width:120px;">💰 ${Math.floor(adenaNow).toLocaleString()}</span>
+            <span style="width:140px;">💰 ${Math.floor(adenaNow).toLocaleString()}</span>
 
             <button class="pause">⏸</button>
             <button class="resume">▶</button>
@@ -201,6 +148,8 @@ function render(){
 
         container.appendChild(div);
 
+        /* ---------- BUTTONS ---------- */
+
         div.querySelector(".pause").onclick = async ()=>{
             p.time = current(p);
             p.adena = getAdena(p);
@@ -210,6 +159,7 @@ function render(){
         };
 
         div.querySelector(".resume").onclick = async ()=>{
+            alerted[name] = false;
             p.start = new Date().toISOString();
             p.running = true;
             await save(name,p);
@@ -217,13 +167,14 @@ function render(){
 
         div.querySelector(".add").onclick = async ()=>{
             let val = parseInt(div.querySelector("input").value);
-            if(!val || val <= 0) return;
+            if(!val) return;
 
             p.time = current(p) + val*60;
             p.adena = getAdena(p);
             p.start = new Date().toISOString();
             p.running = true;
 
+            alerted[name] = false;
             await save(name,p);
         };
 
@@ -252,6 +203,8 @@ async function add(){
     p.start = new Date().toISOString();
     p.running = true;
 
+    alerted[name] = false;
+
     data[name] = p;
     await save(name,p);
 }
@@ -262,10 +215,13 @@ async function addAll(){
 
     for(let name in data){
         let p = data[name];
+
         p.time = current(p) + min*60;
         p.adena = getAdena(p);
         p.start = new Date().toISOString();
         p.running = true;
+
+        alerted[name] = false;
         await save(name,p);
     }
 }
@@ -286,6 +242,7 @@ function resumeAll(){
         let p = data[name];
         p.start = new Date().toISOString();
         p.running = true;
+        alerted[name] = false;
         save(name,p);
     }
 }
@@ -305,8 +262,4 @@ document.getElementById("clearAll").onclick = clearAll;
 
 load();
 setInterval(render,1000);
-
 </script>
-
-</body>
-</html>
