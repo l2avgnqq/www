@@ -1,79 +1,6 @@
-<!DOCTYPE html>
-<html lang="uk">
-<head>
-<meta charset="UTF-8">
-<title>EXP Lineage2</title>
-
-<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
-
-<style>
-body { font-family: Arial; background:#1a1a2e; color:#fff; }
-.top { text-align:center; }
-
-input, button {
-    padding:6px;
-    margin:3px;
-    border-radius:6px;
-    border:none;
-}
-
-button { cursor:pointer; font-weight:bold; }
-
-#addBtn { background:#e74c3c; color:white; }
-#addAllBtn { background:#9b59b6; color:white; }
-.global { background:#34495e; color:white; }
-
-.players { padding:20px; max-width:700px; }
-
-.player {
-    display:flex;
-    align-items:center;
-    gap:10px;
-    padding:8px;
-    border-bottom:1px solid rgba(255,255,255,0.2);
-}
-
-.warning { background:rgba(255,165,0,0.3); }
-.danger { background:rgba(255,0,0,0.4); }
-
-@keyframes blink { 50% {opacity:0.3;} }
-
-#adena {
-    font-size:22px;
-    margin-top:20px;
-    color:#f1c40f;
-    padding-left:20px;
-}
-</style>
-</head>
-
-<body>
-
-<div class="top">
-    <h1>EXP Lineage2</h1>
-
-    <input id="name" placeholder="Ім'я">
-    <input id="minutes" type="number" placeholder="Хв">
-    <button id="addBtn">Додати</button>
-
-    <br>
-
-    <input id="allMinutes" type="number" placeholder="+хв всім">
-    <button id="addAllBtn">Додати всім</button>
-
-    <br>
-
-    <button id="pauseAll" class="global">⏸ Пауза всім</button>
-    <button id="resumeAll" class="global">▶ Старт всім</button>
-    <button id="clearAll" class="global">🧹 Очистити всіх</button>
-</div>
-
-<div id="players" class="players"></div>
-<div id="adena">💰 0</div>
-
 <script>
 const SUPABASE_URL = "https://mxwtlfkhykqegzytotlq.supabase.co";
-const SUPABASE_KEY = const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im14d3RsZmtoeWtxZWd6eXRvdGxxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM5MDI0NDIsImV4cCI6MjA4OTQ3ODQ0Mn0.S5riWE26dEnXANPF070BYmoUDqHgMyPcue-KRr-ugvE';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im14d3RsZmtoeWtxZWd6eXRvdGxxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM5MDI0NDIsImV4cCI6MjA4OTQ3ODQ0Mn0.S5riWE26dEnXANPF070BYmoUDqHgMyPcue-KRr-ugvE';
 const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const ADENA_PER_SEC = 12000000 / 3600;
@@ -81,7 +8,7 @@ const ADENA_PER_SEC = 12000000 / 3600;
 let data = {};
 let alerted = {};
 
-/* ---------- CORE ---------- */
+/* ---------- SAFE UPDATE ---------- */
 function updatePlayer(p){
     if(!p.running) return;
 
@@ -103,34 +30,47 @@ function updatePlayer(p){
     }
 }
 
-/* ---------- LOAD ---------- */
+/* ---------- LOAD (SAFE) ---------- */
 async function load(){
-    let res = await db.from("timers").select("*");
-    if(!res.data) return;
+    try{
+        let res = await db.from("timers").select("*");
 
-    let obj = {};
-    res.data.forEach(p=>{
-        obj[p.name] = {
-            name:p.name,
-            time:Number(p.time)||0,
-            running:!!p.running,
-            adena:Number(p.adena)||0,
-            last_update:p.last_update || new Date().toISOString()
-        };
-    });
+        if(!res || !res.data){
+            console.log("NO DATA FROM DB");
+            return;
+        }
 
-    data = obj;
+        let obj = {};
+        res.data.forEach(p=>{
+            obj[p.name] = {
+                name:p.name,
+                time:Number(p.time)||0,
+                running:!!p.running,
+                adena:Number(p.adena)||0,
+                last_update:p.last_update || new Date().toISOString()
+            };
+        });
+
+        data = obj;
+
+    }catch(e){
+        console.log("LOAD ERROR:", e);
+    }
 }
 
-/* ---------- SAVE ---------- */
+/* ---------- SAVE (SAFE) ---------- */
 async function save(name,p){
-    await db.from("timers").upsert({
-        name:name,
-        time:p.time,
-        running:p.running,
-        adena:p.adena,
-        last_update:p.last_update
-    });
+    try{
+        await db.from("timers").upsert({
+            name:name,
+            time:p.time,
+            running:p.running,
+            adena:p.adena,
+            last_update:p.last_update
+        });
+    }catch(e){
+        console.log("SAVE ERROR:", e);
+    }
 }
 
 /* ---------- RENDER ---------- */
@@ -147,77 +87,30 @@ function render(){
     arr.forEach(([name,p], index)=>{
         total += p.adena;
 
-        if(p.time === 0 && !alerted[name]){
-            new Audio("https://actions.google.com/sounds/v1/alarms/beep_short.ogg").play();
-            alerted[name] = true;
-        }
-
         const div = document.createElement("div");
         div.className = "player";
 
-        if(p.time <= 300 && p.time > 60) div.classList.add("warning");
-        if(p.time <= 60 && p.time > 0){
-            div.classList.add("danger");
-            div.style.animation = "blink 1s infinite";
-        }
-
         div.innerHTML = `
-            <span style="width:30px;">${index+1}.</span>
-            <span style="width:120px;"><b>${name}</b></span>
-            <span style="width:80px;">${Math.floor(p.time/60)}:${(p.time%60).toString().padStart(2,"0")}</span>
-            <span style="width:140px;">💰 ${Math.floor(p.adena).toLocaleString()}</span>
+            <b>${name}</b>
+            ${Math.floor(p.time/60)}:${(p.time%60).toString().padStart(2,"0")}
+            💰 ${Math.floor(p.adena)}
 
-            <button class="pause">⏸</button>
-            <button class="resume">▶</button>
+            <button onclick="pause('${name}')">⏸</button>
+            <button onclick="resume('${name}')">▶</button>
 
-            <input type="number" placeholder="+хв" style="width:60px;">
-            <button class="add">+</button>
-
-            <button class="delete">❌</button>
+            <button onclick="removePlayer('${name}')">❌</button>
         `;
 
         container.appendChild(div);
-
-        div.querySelector(".pause").onclick = async ()=>{
-            updatePlayer(p);
-            p.running = false;
-            await save(name,p);
-        };
-
-        div.querySelector(".resume").onclick = async ()=>{
-            p.running = true;
-            p.last_update = new Date().toISOString();
-            alerted[name] = false;
-            await save(name,p);
-        };
-
-        div.querySelector(".add").onclick = async ()=>{
-            let val = parseInt(div.querySelector("input").value);
-            if(!val) return;
-
-            updatePlayer(p);
-
-            p.time += val*60;
-            p.running = true;
-            p.last_update = new Date().toISOString();
-            alerted[name] = false;
-
-            await save(name,p);
-        };
-
-        div.querySelector(".delete").onclick = async ()=>{
-            await db.from("timers").delete().eq("name", name);
-            delete data[name];
-        };
     });
 
     document.getElementById("adena").innerText =
-        "💰 Adena: " + Math.floor(total).toLocaleString();
+        "💰 " + Math.floor(total);
 }
 
-/* ---------- GLOBAL ---------- */
+/* ---------- ACTIONS ---------- */
 
-document.getElementById("addBtn").onclick = async ()=>{
+async function add(){
     let name = document.getElementById("name").value.trim();
     let min = parseInt(document.getElementById("minutes").value);
     if(!name || !min) return;
@@ -229,58 +122,36 @@ document.getElementById("addBtn").onclick = async ()=>{
     p.time += min*60;
     p.running = true;
     p.last_update = new Date().toISOString();
-    alerted[name] = false;
 
     data[name] = p;
     await save(name,p);
-};
+}
 
-document.getElementById("addAllBtn").onclick = async ()=>{
-    let min = parseInt(document.getElementById("allMinutes").value);
-    if(!min) return;
+async function pause(name){
+    let p = data[name];
+    updatePlayer(p);
+    p.running = false;
+    await save(name,p);
+}
 
-    for(let name in data){
-        let p = data[name];
-        updatePlayer(p);
+async function resume(name){
+    let p = data[name];
+    p.running = true;
+    p.last_update = new Date().toISOString();
+    await save(name,p);
+}
 
-        p.time += min*60;
-        p.running = true;
-        p.last_update = new Date().toISOString();
-        alerted[name] = false;
-
-        await save(name,p);
-    }
-};
-
-document.getElementById("pauseAll").onclick = ()=>{
-    for(let name in data){
-        let p = data[name];
-        updatePlayer(p);
-        p.running = false;
-        save(name,p);
-    }
-};
-
-document.getElementById("resumeAll").onclick = ()=>{
-    for(let name in data){
-        let p = data[name];
-        p.running = true;
-        p.last_update = new Date().toISOString();
-        alerted[name] = false;
-        save(name,p);
-    }
-};
-
-document.getElementById("clearAll").onclick = async ()=>{
-    await db.from("timers").delete().neq("name","");
-    data = {};
-};
+async function removePlayer(name){
+    try{
+        await db.from("timers").delete().eq("name", name);
+    }catch(e){}
+    delete data[name];
+}
 
 /* ---------- INIT ---------- */
+
+document.getElementById("addBtn").onclick = add;
 
 load();
 setInterval(render,1000);
 </script>
-
-</body>
-</html>
