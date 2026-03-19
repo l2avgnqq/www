@@ -90,12 +90,7 @@ let alerted = {};
 
 /* ---------- CORE ---------- */
 function updatePlayer(p){
-
-    if(!p.running){
-        // 🔥 ФІКС: щоб не було "догону" після reload
-        p.last_update = new Date().toISOString();
-        return;
-    }
+    if(!p.running) return;
 
     let last = new Date(p.last_update);
     let now = new Date();
@@ -117,7 +112,12 @@ function updatePlayer(p){
 
 /* ---------- LOAD ---------- */
 async function load(){
-    let {data:rows} = await db.from("timers").select("*");
+    let {data:rows, error} = await db.from("timers").select("*");
+
+    if(error){
+        console.log(error);
+        return;
+    }
 
     let obj = {};
 
@@ -125,7 +125,7 @@ async function load(){
         obj[p.name] = {
             name:p.name,
             time:Number(p.time)||0,
-            running:p.running,
+            running:!!p.running,
             adena:Number(p.adena)||0,
             last_update:p.last_update
         };
@@ -160,13 +160,14 @@ function render(){
 
     let total = 0;
 
-    Object.values(data).forEach(p=> updatePlayer(p));
+    Object.values(data).forEach(p=>{
+        updatePlayer(p);
+        total += p.adena;
+    });
 
     let arr = Object.values(data).sort((a,b)=> a.time - b.time);
 
     arr.forEach((p, index)=>{
-
-        total += p.adena;
 
         const div = document.createElement("div");
         div.className = "player";
@@ -189,7 +190,7 @@ function render(){
             <input type="number" id="add_${p.name}" placeholder="+хв" style="width:60px;">
             <button onclick="addTime('${p.name}')">+</button>
 
-            <button onclick="del('${p.name}')">❌</button>
+            <button onclick="delPlayer('${p.name}')">❌</button>
         `;
 
         container.appendChild(div);
@@ -206,7 +207,13 @@ async function add(){
     let min = parseInt(document.getElementById("minutes").value);
     if(!name || !min) return;
 
-    let p = data[name] || {name:name, time:0, adena:0};
+    let p = data[name] || {
+        name:name,
+        time:0,
+        adena:0,
+        running:false,
+        last_update:new Date().toISOString()
+    };
 
     updatePlayer(p);
 
@@ -236,9 +243,9 @@ async function addTime(name){
 async function pause(name){
     let p = data[name];
 
-    updatePlayer(p);   // 🔥 фіксуємо
+    updatePlayer(p); // фіксуємо час
     p.running = false;
-    p.last_update = new Date().toISOString(); // 🔥 ГОЛОВНИЙ ФІКС
+    p.last_update = new Date().toISOString();
 
     await save(p);
 }
@@ -252,7 +259,7 @@ async function resume(name){
     await save(p);
 }
 
-async function del(name){
+async function delPlayer(name){
     await db.from("timers").delete().eq("name", name);
     delete data[name];
 }
@@ -273,35 +280,14 @@ async function addAll(){
         await save(p);
     }
 }
-async function updatePlayer(p){
 
-    // ❗ ПОВНИЙ СТОП
-    if(!p.running) return;
-
-    let last = new Date(p.last_update);
-    let now = new Date();
-
-    let diff = Math.floor((now - last)/1000);
-    if(diff <= 0) return;
-
-    let worked = Math.min(diff, p.time);
-
-    p.time -= worked;
-    p.adena += worked * ADENA_PER_SEC;
-    p.last_update = now.toISOString();
-
-    if(p.time <= 0){
-        p.time = 0;
-        p.running = false;
-    }
-}
 async function pauseAll(){
     for(let name in data){
         let p = data[name];
 
         updatePlayer(p);
         p.running = false;
-        p.last_update = new Date().toISOString(); // 🔥 ФІКС
+        p.last_update = new Date().toISOString();
 
         await save(p);
     }
@@ -333,9 +319,6 @@ document.getElementById("clearAll").onclick = clearAll;
 
 async function init(){
     await load();
-
-    await syncAll(); // 🔥 ОСЬ СЮДИ
-
     render();
 }
 
