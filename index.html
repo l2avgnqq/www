@@ -122,10 +122,19 @@ async function load(){
     let obj = {};
 
     rows.forEach(p=>{
+
+        // 🔥 ЖОРСТКИЙ ФІКС
+        let isRunning = !!p.running;
+
+        // якщо час вже 0 → точно не працює
+        if(p.time <= 0){
+            isRunning = false;
+        }
+
         obj[p.name] = {
             name:p.name,
             time:Number(p.time)||0,
-            running:!!p.running,
+            running:isRunning,
             adena:Number(p.adena)||0,
             last_update:p.last_update
         };
@@ -243,11 +252,15 @@ async function addTime(name){
 async function pause(name){
     let p = data[name];
 
-    updatePlayer(p); // фіксуємо час
+    updatePlayer(p);
+
     p.running = false;
     p.last_update = new Date().toISOString();
 
     await save(p);
+
+    // 🔥 примусове оновлення локально
+    data[name] = {...p};
 }
 
 async function resume(name){
@@ -282,15 +295,20 @@ async function addAll(){
 }
 
 async function pauseAll(){
+
     for(let name in data){
         let p = data[name];
 
         updatePlayer(p);
+
         p.running = false;
         p.last_update = new Date().toISOString();
 
-        await save(p);
+        await save(p); // ❗ ЧЕКАЄМО КОЖНОГО
     }
+
+    // 🔥 ПІСЛЯ ВСЬОГО ПЕРЕЗАГРУЖАЄМО
+    await load();
 }
 
 async function resumeAll(){
