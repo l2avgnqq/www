@@ -2,7 +2,7 @@
 <html lang="uk">
 <head>
 <meta charset="UTF-8">
-<title>EXP Reborn</title>
+<title>EXP Lineage2</title>
 
 <style>
 body { font-family: Arial; background:#1a1a2e; color:#fff; text-align:center; }
@@ -38,10 +38,8 @@ button { cursor:pointer; font-weight:bold; }
 .add { background:#3498db; }
 .delete { background:#c0392b; color:white; }
 
-.expired { background:rgba(255,0,0,0.4); }
-
 #adena {
-    font-size:20px;
+    font-size:22px;
     margin-top:20px;
     color:#f1c40f;
 }
@@ -50,7 +48,7 @@ button { cursor:pointer; font-weight:bold; }
 </head>
 <body>
 
-<h1>EXP Reborn</h1>
+<h1>EXP Lineage2</h1>
 
 <input id="name" placeholder="Ім'я">
 <input id="minutes" type="number" placeholder="Хв">
@@ -72,12 +70,13 @@ button { cursor:pointer; font-weight:bold; }
 
 const SUPABASE_URL = "https://mxwtlfkhykqegzytotlq.supabase.co";
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im14d3RsZmtoeWtxZWd6eXRvdGxxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM5MDI0NDIsImV4cCI6MjA4OTQ3ODQ0Mn0.S5riWE26dEnXANPF070BYmoUDqHgMyPcue-KRr-ugvE';
-
-const ADENA_PER_HOUR = 12000000;
+const ADENA_PER_SEC = 12000000 / 3600;
 
 let db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 let data = {};
+let lastTime = {};
+let totalAdena = 0;
 
 function format(s){
     let m = Math.floor(s/60);
@@ -95,17 +94,27 @@ function current(p){
     return Math.max(0, p.time - diff);
 }
 
-function calcAdena(){
-    let totalSec = 0;
+function updateAdena(){
+    let gained = 0;
 
     for(let name in data){
-        totalSec += current(data[name]);
+        let now = current(data[name]);
+
+        if(lastTime[name] !== undefined){
+            let diff = lastTime[name] - now;
+
+            if(diff > 0){
+                gained += diff;
+            }
+        }
+
+        lastTime[name] = now;
     }
 
-    let adena = (totalSec / 3600) * ADENA_PER_HOUR;
+    totalAdena += gained * ADENA_PER_SEC;
 
     document.getElementById("adena").innerText =
-        "💰 Adena: " + Math.floor(adena).toLocaleString();
+        "💰 Adena: " + Math.floor(totalAdena).toLocaleString();
 }
 
 function create(name){
@@ -172,10 +181,24 @@ async function save(name,p){
 async function load(){
     const {data:rows} = await db.from("timers").select("*");
 
+    let newData = {};
+
     rows.forEach(p=>{
-        data[p.name]=p;
-        create(p.name);
+        newData[p.name] = p;
+
+        if(!data[p.name]){
+            create(p.name);
+        }
     });
+
+    for(let name in data){
+        if(!newData[name]){
+            let el = document.getElementById(name);
+            if(el) el.remove();
+        }
+    }
+
+    data = newData;
 }
 
 function update(){
@@ -190,7 +213,7 @@ function update(){
         }
     }
 
-    calcAdena();
+    updateAdena();
 }
 
 async function add(){
@@ -240,17 +263,10 @@ function resumeAll(){
 
 async function clearAll(){
     await db.from("timers").delete().neq("name","");
-}
-
-function initRealtime(){
-    db.channel("timers")
-    .on("postgres_changes",
-        { event: "*", schema: "public", table: "timers" },
-        payload => {
-            load(); // 🔥 миттєве оновлення
-        }
-    )
-    .subscribe();
+    data = {};
+    lastTime = {};
+    totalAdena = 0;
+    document.getElementById("players").innerHTML = "";
 }
 
 document.getElementById("addBtn").onclick = add;
@@ -258,9 +274,8 @@ document.getElementById("pauseAll").onclick = pauseAll;
 document.getElementById("resumeAll").onclick = resumeAll;
 document.getElementById("clearAll").onclick = clearAll;
 
-load();
-initRealtime();
-setInterval(update,1000);
+setInterval(load, 1000);   // 🔥 псевдо realtime
+setInterval(update, 1000); // 🔥 логіка + адена
 
 })();
 </script>
