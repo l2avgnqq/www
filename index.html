@@ -22,8 +22,9 @@ gap:20px;
 }
 
 .left{flex:1;}
+
 .right{
-width:320px;
+width:340px;
 background:#162033;
 padding:15px;
 border-radius:12px;
@@ -66,7 +67,7 @@ border:none;
 border-radius:10px;
 background:#111827;
 color:white;
-width:80px;
+width:90px;
 }
 
 button{
@@ -104,7 +105,8 @@ font-weight:bold;
 
 <br><br>
 
-<input id="all" type="number" placeholder="+всем">
+<input id="all" type="number" placeholder="+ всем">
+
 <button class="add" onclick="addAll()">+ всем</button>
 <button class="pause" onclick="pauseAll()">⏸ всем</button>
 <button class="resume" onclick="resumeAll()">▶ всем</button>
@@ -116,16 +118,23 @@ font-weight:bold;
 
 </div>
 
-<!-- RIGHT LEVELS -->
+<!-- RIGHT -->
 <div class="right">
 
 <h3>Прокачка по lvl</h3>
 
-<input id="lvlName" placeholder="Ник"><br><br>
-<input id="lvlFrom" type="number" placeholder="с лвл"><br><br>
-<input id="lvlTo" type="number" placeholder="по лвл"><br><br>
+<div style="display:flex;flex-direction:column;gap:8px;">
+
+<input id="lvlName" placeholder="Ник">
+
+<div style="display:flex;gap:6px;">
+<input id="lvlFrom" type="number" placeholder="с лвл" style="flex:1;">
+<input id="lvlTo" type="number" placeholder="до лвл" style="flex:1;">
+</div>
 
 <button class="add" onclick="addLevel()">Добавить</button>
+
+</div>
 
 <hr>
 
@@ -185,7 +194,7 @@ levels={};
 const save = p => db.from("timers").upsert(p);
 const saveLevel = p => db.from("levels").upsert(p);
 
-/* ================= CREATE ROW ================= */
+/* ================= RENDER ================= */
 
 function createRow(p){
 
@@ -196,7 +205,6 @@ div.className="player";
 div.id="r_"+pid;
 
 div.innerHTML=`
-
 <div class="idx"></div>
 <div class="name">${p.name}</div>
 <div class="time" id="t_${pid}">0</div>
@@ -205,11 +213,8 @@ div.innerHTML=`
 
 <button id="b_${pid}"></button>
 
-<button class="add" onclick="add30('${p.name}')">+30m</button>
-<button class="add" onclick="add1h('${p.name}')">+1h</button>
-
-<button class="pause" onclick="pausePlayer('${p.name}')">⏸</button>
-<button class="resume" onclick="resumePlayer('${p.name}')">▶</button>
+<button class="small" onclick="add30('${p.name}')">+30м</button>
+<button class="small" onclick="add1h('${p.name}')">+1ч</button>
 
 <button class="del" onclick="removePlayer('${p.name}')">🗑</button>
 
@@ -218,8 +223,6 @@ div.innerHTML=`
 
 document.getElementById("list").appendChild(div);
 }
-
-/* ================= RENDER ================= */
 
 function render(){
 
@@ -249,16 +252,16 @@ if(!row) return;
 row.querySelector(".idx").innerText=i+1;
 document.getElementById("t_"+pid).innerText = fmt(left(p));
 
-let rowBtn=document.getElementById("b_"+pid);
+let btn=document.getElementById("b_"+pid);
 
 if(p.running){
-rowBtn.innerText="⏸";
-rowBtn.className="pause";
-rowBtn.onclick=()=>pausePlayer(p.name);
+btn.innerText="⏸";
+btn.className="pause";
+btn.onclick=()=>pausePlayer(p.name);
 }else{
-rowBtn.innerText="▶";
-rowBtn.className="resume";
-rowBtn.onclick=()=>resumePlayer(p.name);
+btn.innerText="▶";
+btn.className="resume";
+btn.onclick=()=>resumePlayer(p.name);
 }
 
 row.classList.remove("warn","danger");
@@ -320,6 +323,7 @@ await load();
 render();
 }
 
+/* TOGGLE */
 async function pausePlayer(name){
 let p=players[name];
 if(!p) return;
@@ -426,9 +430,9 @@ lvlTo.value="";
 
 async function removeLevel(name){
 await db.from("levels").delete().eq("name",name);
+delete levels[name];
+renderLevels();
 }
-
-/* ================= RENDER LEVELS ================= */
 
 function renderLevels(){
 
