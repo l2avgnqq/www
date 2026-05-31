@@ -30,8 +30,6 @@ body{
     border-radius:12px;
 }
 
-.top{text-align:center;margin-bottom:20px;}
-
 .player{
     background:#162033;
     margin:8px 0;
@@ -84,16 +82,14 @@ button{
 
 <body>
 
-<div class="top">
-<h2>EXP L2</h2>
-</div>
-
 <div class="layout">
 
+<!-- LEFT -->
 <div class="timers">
 <div id="list"></div>
 </div>
 
+<!-- RIGHT -->
 <div class="levels">
 <h3>Прокачка</h3>
 
@@ -122,17 +118,19 @@ let levels = {};
 
 const id = s => s.replace(/[^a-z0-9]/gi,"_");
 
+/* ---------------- TIME ---------------- */
+
+const left = p => {
+if(!p.running || !p.last_update) return p.time;
+return Math.max(0,p.time - Math.floor((Date.now()-new Date(p.last_update))/1000));
+};
+
 const fmt = s => {
 s=Math.max(0,s);
 let h=Math.floor(s/3600);
 let m=Math.floor((s%3600)/60);
 let sec=s%60;
 return `${h}:${String(m).padStart(2,"0")}:${String(sec).padStart(2,"0")}`;
-};
-
-const left = p => {
-if(!p.running || !p.last_update) return p.time;
-return Math.max(0,p.time - Math.floor((Date.now()-new Date(p.last_update))/1000));
 };
 
 /* ---------------- LOAD ---------------- */
@@ -154,7 +152,7 @@ levels={};
 const saveTimer = p => db.from("timers").upsert(p);
 const saveLevel = p => db.from("levels").upsert(p);
 
-/* ---------------- UI ---------------- */
+/* ---------------- RENDER TIMERS ---------------- */
 
 function createRow(p){
 
@@ -173,6 +171,7 @@ div.innerHTML=`
 
 <button id="b_${pid}"></button>
 
+<!-- FIX: +30 / +1h instead of input -->
 <button class="small" onclick="add30('${p.name}')">+30m</button>
 <button class="small" onclick="add1h('${p.name}')">+1h</button>
 
@@ -197,7 +196,7 @@ if(!document.getElementById("r_"+pid)) createRow(p);
 });
 }
 
-/* ---------------- REALTIME TICK ---------------- */
+/* ---------------- TICK (NO REBUILD BUG FIX) ---------------- */
 
 function tick(){
 
@@ -215,11 +214,11 @@ let btn=document.getElementById("b_"+pid);
 if(p.running){
 btn.innerText="⏸";
 btn.className="pause";
-btn.onclick=()=>pause(p.name);
+btn.onclick=()=>pausePlayer(p.name);
 }else{
 btn.innerText="▶";
 btn.className="resume";
-btn.onclick=()=>resume(p.name);
+btn.onclick=()=>resumePlayer(p.name);
 }
 
 row.classList.remove("warn","danger");
@@ -230,7 +229,7 @@ if(left(p)<=60) row.classList.add("danger");
 
 }
 
-/* ---------------- ACTIONS ---------------- */
+/* ---------------- FIXED TIME ACTIONS ---------------- */
 
 async function add30(name){
 let p=players[name];
@@ -248,7 +247,7 @@ p.last_update = new Date().toISOString();
 await saveTimer(p);
 }
 
-async function pause(name){
+async function pausePlayer(name){
 let p=players[name];
 p.time = left(p);
 p.running=false;
@@ -256,7 +255,7 @@ p.last_update=null;
 await saveTimer(p);
 }
 
-async function resume(name){
+async function resumePlayer(name){
 let p=players[name];
 p.running=true;
 p.last_update=new Date().toISOString();
@@ -268,12 +267,14 @@ await db.from("timers").delete().eq("name",name);
 delete players[name];
 }
 
-/* ---------------- LEVELS ---------------- */
+/* ---------------- LEVELS FIX ---------------- */
 
 async function addLevel(){
+
 let name=lvlName.value.trim();
 let from=parseInt(lvlFrom.value);
 let to=parseInt(lvlTo.value);
+
 if(!name||!from||!to) return;
 
 await saveLevel({
@@ -281,9 +282,43 @@ name,
 lvl_from:from,
 lvl_to:to
 });
+
+/* FIX: force reload so it appears immediately */
+await loadLevels();
+renderLevels();
+
+lvlName.value="";
+lvlFrom.value="";
+lvlTo.value="";
 }
 
-/* ---------------- REALTIME ---------------- */
+async function removeLevel(name){
+await db.from("levels").delete().eq("name",name);
+delete levels[name];
+renderLevels();
+}
+
+/* ---------------- LEVEL RENDER ---------------- */
+
+function renderLevels(){
+
+let html="";
+
+Object.values(levels)
+.sort((a,b)=>a.lvl_from-b.lvl_from)
+.forEach(p=>{
+html+=`
+<div class="player">
+<div class="name">${p.name}</div>
+<div>${p.lvl_from} → ${p.lvl_to}</div>
+<button class="del" onclick="removeLevel('${p.name}')">🗑</button>
+</div>`;
+});
+
+levelList.innerHTML=html;
+}
+
+/* ---------------- REALTIME FIX ---------------- */
 
 db.channel("timers")
 .on("postgres_changes",{event:"*",schema:"public",table:"timers"},async()=>{
@@ -299,25 +334,7 @@ renderLevels();
 })
 .subscribe();
 
-function renderLevels(){
-let html="";
-Object.values(levels)
-.sort((a,b)=>a.lvl_from-b.lvl_from)
-.forEach(p=>{
-html+=`
-<div class="player">
-<div class="name">${p.name}</div>
-<div>${p.lvl_from} → ${p.lvl_to}</div>
-<button class="del" onclick="removeLevel('${p.name}')">🗑</button>
-</div>`;
-});
-levelList.innerHTML=html;
-}
-
-async function removeLevel(name){
-await db.from("levels").delete().eq("name",name);
-delete levels[name];
-}
+/* ---------------- INIT ---------------- */
 
 async function init(){
 await loadTimers();
