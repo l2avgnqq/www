@@ -106,7 +106,6 @@ font-weight:bold;
 <br><br>
 
 <input id="all" type="number" placeholder="+ всем">
-
 <button class="add" onclick="addAll()">+ всем</button>
 <button class="pause" onclick="pauseAll()">⏸ всем</button>
 <button class="resume" onclick="resumeAll()">▶ всем</button>
@@ -194,7 +193,7 @@ levels={};
 const save = p => db.from("timers").upsert(p);
 const saveLevel = p => db.from("levels").upsert(p);
 
-/* ================= RENDER ================= */
+/* ================= RENDER ROW ================= */
 
 function createRow(p){
 
@@ -213,8 +212,8 @@ div.innerHTML=`
 
 <button id="b_${pid}"></button>
 
-<button class="small" onclick="add30('${p.name}')">+30м</button>
-<button class="small" onclick="add1h('${p.name}')">+1ч</button>
+<button class="small" onclick="add30('${p.name}')">+30m</button>
+<button class="small" onclick="add1h('${p.name}')">+1h</button>
 
 <button class="del" onclick="removePlayer('${p.name}')">🗑</button>
 
@@ -223,6 +222,8 @@ div.innerHTML=`
 
 document.getElementById("list").appendChild(div);
 }
+
+/* ================= MAIN RENDER ================= */
 
 function render(){
 
@@ -239,19 +240,33 @@ if(!document.getElementById("r_"+pid)) createRow(p);
 
 }
 
-/* ================= TICK ================= */
+/* ================= SORTED TICK ================= */
 
 function tick(){
 
-Object.values(players).forEach((p,i)=>{
+let arr = Object.values(players)
+.map(p=>({
+...p,
+remain:left(p)
+}))
+.sort((a,b)=>a.remain-b.remain); // 🔥 главный фикс
+
+arr.forEach((p,i)=>{
 
 let pid=id(p.name);
 let row=document.getElementById("r_"+pid);
 if(!row) return;
 
-row.querySelector(".idx").innerText=i+1;
-document.getElementById("t_"+pid).innerText = fmt(left(p));
+// порядок в DOM
+document.getElementById("list").appendChild(row);
 
+// индекс
+row.querySelector(".idx").innerText=i+1;
+
+// таймер
+document.getElementById("t_"+pid).innerText=fmt(p.remain);
+
+// toggle кнопка
 let btn=document.getElementById("b_"+pid);
 
 if(p.running){
@@ -264,9 +279,10 @@ btn.className="resume";
 btn.onclick=()=>resumePlayer(p.name);
 }
 
+// цвет
 row.classList.remove("warn","danger");
-if(left(p)<=300) row.classList.add("warn");
-if(left(p)<=60) row.classList.add("danger");
+if(p.remain<=300) row.classList.add("warn");
+if(p.remain<=60) row.classList.add("danger");
 
 });
 
@@ -279,7 +295,7 @@ async function addPlayer(){
 let name=nameInput.value.trim();
 let min=parseInt(minInput.value);
 
-if(!name || !min) return;
+if(!name||!min) return;
 
 let p=players[name] || {
 name,
