@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>EXP L2</title>
+<title>EXP L2 FIX FINAL</title>
 
 <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 
@@ -16,25 +16,11 @@ font-family:Arial;
 padding:20px;
 }
 
-.layout{
-display:flex;
-gap:20px;
-}
-
+.layout{display:flex;gap:20px;}
 .left{flex:1;}
+.right{width:340px;background:#162033;padding:15px;border-radius:12px;}
 
-.right{
-width:340px;
-background:#162033;
-padding:15px;
-border-radius:12px;
-height:fit-content;
-}
-
-.top{
-text-align:center;
-margin-bottom:20px;
-}
+.top{text-align:center;margin-bottom:20px;}
 
 .player{
 background:#162033;
@@ -87,7 +73,6 @@ font-weight:bold;
 <div class="left">
 
 <div class="top">
-
 <h2>EXP L2</h2>
 
 <input id="name" placeholder="Имя">
@@ -100,7 +85,6 @@ font-weight:bold;
 <button class="add" onclick="addAll()">+ всем</button>
 <button class="pause" onclick="pauseAll()">⏸ всем</button>
 <button class="resume" onclick="resumeAll()">▶ всем</button>
-
 </div>
 
 <div id="list"></div>
@@ -108,10 +92,9 @@ font-weight:bold;
 </div>
 
 <div class="right">
-
 <h3>Прокачка по lvl</h3>
 
-<input id="lvlName" placeholder="Ник">
+<input id="lvlName" placeholder="Ник"><br><br>
 
 <div style="display:flex;gap:6px;">
 <input id="lvlFrom" type="number" placeholder="с лвл" style="flex:1;">
@@ -123,7 +106,6 @@ font-weight:bold;
 <hr>
 
 <div id="levelList"></div>
-
 </div>
 
 </div>
@@ -178,26 +160,33 @@ function render(){
 const list=document.getElementById("list");
 list.innerHTML="";
 
-Object.values(players).forEach((p,i)=>{
+/* 🔥 ВАЖНО: сортировка по времени */
+const arr = Object.values(players)
+.map(p=>({...p, remain:left(p)}))
+.sort((a,b)=>a.remain-b.remain);
+
+arr.forEach((p,i)=>{
 
 const pid=id(p.id);
 
 const row=document.createElement("div");
 row.className="player";
 
+if(p.remain<=300) row.classList.add("warn");
+if(p.remain<=60) row.classList.add("danger");
+
 row.innerHTML=`
 <div class="idx">${i+1}</div>
 <div class="name">${p.name}</div>
 <div class="time" id="t_${pid}">0</div>
 
-<div class="actions">
+<button onclick="toggle('${p.id}')">
+${p.running ? "⏸" : "▶"}
+</button>
 
-<button id="b_${pid}"></button>
 <button class="small" onclick="add30('${p.id}')">+30m</button>
 <button class="small" onclick="add1h('${p.id}')">+1h</button>
-<button class="del" onclick="removePlayer('${p.id}')">🗑</button>
-
-</div>
+<button class="del" onclick="removeP('${p.id}')">🗑</button>
 `;
 
 list.appendChild(row);
@@ -229,12 +218,10 @@ el.appendChild(row);
 /* ================= TICK ================= */
 
 function tick(){
-
 Object.values(players).forEach(p=>{
 const el=document.getElementById("t_"+id(p.id));
 if(el) el.innerText=fmt(left(p));
 });
-
 }
 
 /* ================= ACTIONS ================= */
@@ -258,8 +245,18 @@ await load();
 render();
 }
 
-async function add30(id){
-const p=players[id];
+async function toggle(idv){
+const p=players[idv];
+p.time=left(p);
+p.running=!p.running;
+p.last_update=p.running?new Date().toISOString():null;
+await save(p);
+await load();
+render();
+}
+
+async function add30(idv){
+const p=players[idv];
 p.time=left(p)+1800;
 p.running=true;
 await save(p);
@@ -267,20 +264,10 @@ await load();
 render();
 }
 
-async function add1h(id){
-const p=players[id];
+async function add1h(idv){
+const p=players[idv];
 p.time=left(p)+3600;
 p.running=true;
-await save(p);
-await load();
-render();
-}
-
-async function toggle(id){
-const p=players[id];
-p.time=left(p);
-p.running=!p.running;
-p.last_update=p.running?new Date().toISOString():null;
 await save(p);
 await load();
 render();
@@ -340,7 +327,7 @@ await loadLevels();
 renderLevels();
 }
 
-/* ================= REALTIME (ГЛАВНОЕ ИСПРАВЛЕНИЕ) ================= */
+/* ================= REALTIME ================= */
 
 db.channel("timers")
 .on("postgres_changes",{event:"*",schema:"public",table:"timers"},async()=>{
