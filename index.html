@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>EXP L2 FIX FINAL</title>
+<title>EXP L2 FINAL FIX</title>
 
 <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 
@@ -20,8 +20,6 @@ padding:20px;
 .left{flex:1;}
 .right{width:340px;background:#162033;padding:15px;border-radius:12px;}
 
-.top{text-align:center;margin-bottom:20px;}
-
 .player{
 background:#162033;
 margin:8px 0;
@@ -36,33 +34,22 @@ flex-wrap:wrap;
 .warn{background:#3a2c00}
 .danger{background:#4a1010}
 
-.idx{width:30px;color:#94a3b8;font-weight:bold;}
+.idx{width:30px;}
 .name{width:140px;font-weight:bold;}
-.time{width:120px;font-size:22px;font-weight:bold;color:#22c55e;}
-
-input{
-padding:8px;
-border:none;
-border-radius:10px;
-background:#111827;
-color:white;
-width:90px;
-}
+.time{width:120px;font-size:20px;color:#22c55e;}
 
 button{
 border:none;
-border-radius:10px;
-padding:8px 10px;
+padding:6px 10px;
+border-radius:8px;
 cursor:pointer;
-color:white;
-font-weight:bold;
 }
 
-.add{background:#2563eb}
+.add{background:#2563eb;color:#fff}
 .pause{background:#f59e0b}
 .resume{background:#22c55e}
 .del{background:#ef4444}
-.small{background:#334155;font-size:12px}
+.small{background:#334155;color:#fff}
 </style>
 </head>
 
@@ -72,7 +59,6 @@ font-weight:bold;
 
 <div class="left">
 
-<div class="top">
 <h2>EXP L2</h2>
 
 <input id="name" placeholder="Имя">
@@ -85,27 +71,26 @@ font-weight:bold;
 <button class="add" onclick="addAll()">+ всем</button>
 <button class="pause" onclick="pauseAll()">⏸ всем</button>
 <button class="resume" onclick="resumeAll()">▶ всем</button>
-</div>
+
+<br><br>
 
 <div id="list"></div>
 
 </div>
 
 <div class="right">
-<h3>Прокачка по lvl</h3>
+
+<h3>Лвл</h3>
 
 <input id="lvlName" placeholder="Ник"><br><br>
-
-<div style="display:flex;gap:6px;">
-<input id="lvlFrom" type="number" placeholder="с лвл" style="flex:1;">
-<input id="lvlTo" type="number" placeholder="до лвл" style="flex:1;">
-</div>
-
+<input id="lvlFrom" type="number" placeholder="с лвл">
+<input id="lvlTo" type="number" placeholder="до лвл"><br><br>
 <button class="add" onclick="addLevel()">Добавить</button>
 
 <hr>
 
 <div id="levelList"></div>
+
 </div>
 
 </div>
@@ -122,7 +107,7 @@ let levels = {};
 
 /* ================= HELPERS ================= */
 
-const id = s => encodeURIComponent(String(s));
+const id = s => String(s);
 
 const fmt = s => {
 s=Math.max(0,s||0);
@@ -160,14 +145,11 @@ function render(){
 const list=document.getElementById("list");
 list.innerHTML="";
 
-/* 🔥 ВАЖНО: сортировка по времени */
 const arr = Object.values(players)
 .map(p=>({...p, remain:left(p)}))
 .sort((a,b)=>a.remain-b.remain);
 
 arr.forEach((p,i)=>{
-
-const pid=id(p.id);
 
 const row=document.createElement("div");
 row.className="player";
@@ -178,10 +160,10 @@ if(p.remain<=60) row.classList.add("danger");
 row.innerHTML=`
 <div class="idx">${i+1}</div>
 <div class="name">${p.name}</div>
-<div class="time" id="t_${pid}">0</div>
+<div class="time" id="t_${p.id}">0</div>
 
 <button onclick="toggle('${p.id}')">
-${p.running ? "⏸" : "▶"}
+${p.running?"⏸":"▶"}
 </button>
 
 <button class="small" onclick="add30('${p.id}')">+30m</button>
@@ -215,17 +197,24 @@ el.appendChild(row);
 });
 }
 
-/* ================= TICK ================= */
+/* ================= LIVE TICK ================= */
 
 function tick(){
 Object.values(players).forEach(p=>{
-const el=document.getElementById("t_"+id(p.id));
+const el=document.getElementById("t_"+p.id);
 if(el) el.innerText=fmt(left(p));
 });
 }
 
-/* ================= ACTIONS ================= */
+/* ================= ACTIONS (FIXED NO FLASH) ================= */
 
+function updateLocal(id, fn){
+const p = players[id];
+if(!p) return;
+fn(p);
+}
+
+/* ADD PLAYER */
 async function addPlayer(){
 
 const name=document.getElementById("name").value.trim();
@@ -233,80 +222,100 @@ const min=parseInt(document.getElementById("min").value);
 
 if(!name||isNaN(min)) return;
 
-await save({
+const p={
 id:crypto.randomUUID(),
 name,
 time:min*60,
 running:true,
 last_update:new Date().toISOString()
-});
+};
 
-await load();
+players[p.id]=p; // 🔥 instant UI
 render();
+
+await save(p);
 }
 
-async function toggle(idv){
-const p=players[idv];
+/* TOGGLE */
+async function toggle(id){
+
+updateLocal(id,p=>{
 p.time=left(p);
 p.running=!p.running;
 p.last_update=p.running?new Date().toISOString():null;
-await save(p);
-await load();
+});
+
 render();
+await save(players[id]);
 }
 
-async function add30(idv){
-const p=players[idv];
+/* ADD TIME */
+async function add30(id){
+updateLocal(id,p=>{
 p.time=left(p)+1800;
 p.running=true;
-await save(p);
-await load();
+});
 render();
+await save(players[id]);
 }
 
-async function add1h(idv){
-const p=players[idv];
+async function add1h(id){
+updateLocal(id,p=>{
 p.time=left(p)+3600;
 p.running=true;
-await save(p);
-await load();
+});
 render();
+await save(players[id]);
 }
 
-/* ================= MASS ================= */
+/* DELETE FIXED */
+async function removeP(id){
+delete players[id];
+render();
+await db.from("timers").delete().eq("id",id);
+}
 
+/* MASS FIXED */
 async function addAll(){
 const v=parseInt(document.getElementById("all").value||0);
-for(const p of Object.values(players)){
+
+Object.values(players).forEach(p=>{
 p.time=left(p)+(v||0)*60;
 p.running=true;
+});
+
+render();
+
+for(const p of Object.values(players)){
 await save(p);
 }
-await load();
-render();
 }
 
 async function pauseAll(){
-for(const p of Object.values(players)){
+Object.values(players).forEach(p=>{
 p.time=left(p);
 p.running=false;
+});
+render();
+
+for(const p of Object.values(players)){
 await save(p);
 }
-await load();
-render();
 }
 
 async function resumeAll(){
-for(const p of Object.values(players)){
+Object.values(players).forEach(p=>{
 p.running=true;
 p.last_update=new Date().toISOString();
+});
+render();
+
+for(const p of Object.values(players)){
 await save(p);
 }
-await load();
-render();
 }
 
-/* ================= LEVELS ================= */
+/* LEVELS */
 
 async function addLevel(){
 
@@ -316,15 +325,18 @@ const to=parseInt(document.getElementById("lvlTo").value);
 
 if(!name||isNaN(from)||isNaN(to)) return;
 
-await saveLevel({
-id:crypto.randomUUID(),
-name,
-lvl_from:from,
-lvl_to:to
-});
+const l={id:crypto.randomUUID(),name,lvl_from:from,lvl_to:to};
 
-await loadLevels();
+levels[l.id]=l;
 renderLevels();
+
+await saveLevel(l);
+}
+
+async function removeLevel(id){
+delete levels[id];
+renderLevels();
+await db.from("levels").delete().eq("id",id);
 }
 
 /* ================= REALTIME ================= */
