@@ -1,124 +1,197 @@
-<script>
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>EXP L2</title>
 
-window.addEventListener("DOMContentLoaded", async () => {
+<!-- Supabase (2 источника на случай блокировки) -->
+<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
-if (typeof supabase === "undefined") {
-    document.body.innerHTML = "<h2 style='color:white'>Supabase не загрузился</h2>";
-    return;
+<style>
+body{
+margin:0;
+background:#0b1220;
+color:#fff;
+font-family:Arial;
+padding:20px;
 }
 
-/* ================= SUPABASE ================= */
+.layout{display:flex;gap:20px;}
+.left{flex:1;}
+.right{width:340px;background:#162033;padding:15px;border-radius:12px;}
 
-const db = supabase.createClient(
-"https://mxwtlfkhykqegzytotlq.supabase.co",
-"sb_publishable_-FajhSo3HLdy00i5VNemSA_89bLw5Qp"
-);
+.player{
+background:#162033;
+margin:8px 0;
+padding:12px;
+border-radius:12px;
+display:flex;
+gap:10px;
+align-items:center;
+}
 
-/* ================= STATE ================= */
+.warn{background:#3a2c00}
+.danger{background:#4a1010}
 
+.idx{width:30px;}
+.name{width:140px;font-weight:bold;}
+.time{width:120px;font-size:20px;color:#22c55e;}
+
+button{
+border:none;
+padding:6px 10px;
+border-radius:8px;
+cursor:pointer;
+}
+
+.add{background:#2563eb;color:#fff}
+.pause{background:#f59e0b}
+.resume{background:#22c55e}
+.del{background:#ef4444}
+.small{background:#334155;color:#fff}
+</style>
+</head>
+
+<body>
+
+<div class="layout">
+
+<div class="left">
+
+<h2>EXP L2</h2>
+
+<input id="name" placeholder="Имя">
+<input id="min" type="number" placeholder="Мин">
+<button class="add" onclick="addPlayer()">Добавить</button>
+
+<br><br>
+
+<div id="list"></div>
+
+</div>
+
+<div class="right">
+<h3>Лвл</h3>
+
+<input id="lvlName" placeholder="Ник"><br><br>
+<input id="lvlFrom" type="number" placeholder="с лвл">
+<input id="lvlTo" type="number" placeholder="до"><br><br>
+<button class="add" onclick="addLevel()">Добавить</button>
+
+<hr>
+
+<div id="levelList"></div>
+</div>
+
+</div>
+
+<script>
+
+let db = null;
 let players = {};
 let levels = {};
 
+/* ================= SAFE INIT ================= */
+
+function initSupabase(){
+    if (typeof supabase === "undefined") return false;
+
+    db = supabase.createClient(
+        "https://mxwtlfkhykqegzytotlq.supabase.co",
+        "sb_publishable_-FajhSo3HLdy00i5VNemSA_89bLw5Qp"
+    );
+
+    return true;
+}
+
 /* ================= HELPERS ================= */
 
-const safeId = (s) =>
-    encodeURIComponent(String(s ?? ""));
+const id = s => encodeURIComponent(String(s));
+const uuid = () => crypto.randomUUID ? crypto.randomUUID() : String(Date.now());
 
-const uuid = () =>
-    (crypto && crypto.randomUUID)
-        ? crypto.randomUUID()
-        : String(Date.now() + Math.random());
-
-const fmt = (s) => {
-    s = Math.max(0, s || 0);
-    let h = Math.floor(s / 3600);
-    let m = Math.floor((s % 3600) / 60);
-    let sec = s % 60;
-    return `${h}:${String(m).padStart(2,"0")}:${String(sec).padStart(2,"0")}`;
+const fmt = s => {
+    s = Math.max(0, s||0);
+    return `${Math.floor(s/3600)}:${String(Math.floor((s%3600)/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`;
 };
 
-const left = (p) => {
-    if (!p || !p.running || !p.last_update) return p.time || 0;
-    return Math.max(0,
-        (p.time || 0) - Math.floor((Date.now() - new Date(p.last_update)) / 1000)
-    );
+const left = p => {
+    if(!p?.running || !p?.last_update) return p.time || 0;
+    return Math.max(0, p.time - Math.floor((Date.now()-new Date(p.last_update))/1000));
 };
 
 /* ================= LOAD ================= */
 
 async function load(){
-    try {
-        const {data} = await db.from("timers").select("*");
-        players = {};
-        (data || []).forEach(p => players[p.id] = p);
-    } catch(e){}
+    if(!db) return;
+    const {data} = await db.from("timers").select("*");
+    players = {};
+    (data||[]).forEach(p=>players[p.id]=p);
 }
 
 async function loadLevels(){
-    try {
-        const {data} = await db.from("levels").select("*");
-        levels = {};
-        (data || []).forEach(p => levels[p.id] = p);
-    } catch(e){}
+    if(!db) return;
+    const {data} = await db.from("levels").select("*");
+    levels = {};
+    (data||[]).forEach(p=>levels[p.id]=p);
 }
 
 /* ================= SAVE ================= */
 
-const save = (p) =>
-    db.from("timers").upsert(p);
-
-const saveLevel = (p) =>
-    db.from("levels").upsert(p);
-
-/* ================= RENDER PLAYERS ================= */
-
-function createRow(p){
-
-    const pid = safeId(p.id);
-
-    const div = document.createElement("div");
-    div.className = "player";
-    div.id = "r_" + pid;
-
-    div.innerHTML = `
-        <div class="idx"></div>
-        <div class="name"></div>
-        <div class="time" id="t_${pid}">0</div>
-        <div class="actions">
-            <button id="b_${pid}"></button>
-            <button class="small">+30m</button>
-            <button class="small">+1h</button>
-            <button class="del">🗑</button>
-        </div>
-    `;
-
-    div.querySelector(".name").textContent = p.name || "";
-
-    div.querySelectorAll(".small")[0].onclick = () => add30(p.id);
-    div.querySelectorAll(".small")[1].onclick = () => add1h(p.id);
-    div.querySelector(".del").onclick = () => removePlayer(p.id);
-
-    const list = document.getElementById("list");
-    if (list) list.appendChild(div);
-}
+const save = p => db ? db.from("timers").upsert(p) : null;
+const saveLevel = p => db ? db.from("levels").upsert(p) : null;
 
 /* ================= RENDER ================= */
 
 function render(){
 
     const list = document.getElementById("list");
-    if (!list) return;
+    if(!list) return;
 
-    document.querySelectorAll(".player").forEach(r=>{
-        if(r.id.startsWith("r_")){
-            const rid = r.id.replace("r_","");
-            if(!players[rid]) r.remove();
-        }
+    list.innerHTML = "";
+
+    Object.values(players).forEach((p,i)=>{
+
+        const pid = id(p.id);
+
+        const row = document.createElement("div");
+        row.className = "player";
+        row.id = "r_"+pid;
+
+        row.innerHTML = `
+            <div class="idx">${i+1}</div>
+            <div class="name">${p.name}</div>
+            <div class="time" id="t_${pid}">0</div>
+            <button onclick="toggle('${p.id}')">▶/⏸</button>
+            <button class="small" onclick="add30('${p.id}')">+30</button>
+            <button class="small" onclick="add1h('${p.id}')">+1h</button>
+            <button class="del" onclick="removeP('${p.id}')">🗑</button>
+        `;
+
+        list.appendChild(row);
     });
+}
 
-    Object.values(players).forEach(p=>{
-        const pid = safeId(p.id);
-        if(!document.getElementById("r_"+pid)) createRow(p);
+function renderLevels(){
+
+    const el = document.getElementById("levelList");
+    if(!el) return;
+
+    el.innerHTML = "";
+
+    Object.values(levels).forEach(l=>{
+
+        const row = document.createElement("div");
+        row.className = "player";
+
+        row.innerHTML = `
+            <div class="name">${l.name}</div>
+            <div>${l.lvl_from} → ${l.lvl_to}</div>
+            <button class="del" onclick="removeL('${l.id}')">🗑</button>
+        `;
+
+        el.appendChild(row);
     });
 }
 
@@ -126,148 +199,73 @@ function render(){
 
 function tick(){
 
-    const arr = Object.values(players || {})
-        .map(p => ({...p, remain:left(p)}))
-        .sort((a,b)=>a.remain-b.remain);
+    Object.values(players).forEach(p=>{
 
-    arr.forEach((p,i)=>{
+        const pid = id(p.id);
+        const el = document.getElementById("t_"+pid);
+        if(el) el.innerText = fmt(left(p));
 
-        const pid = safeId(p.id);
-        const row = document.getElementById("r_"+pid);
-        if(!row) return;
-
-        const list = document.getElementById("list");
-        if (list) list.appendChild(row);
-
-        const idx = row.querySelector(".idx");
-        if (idx) idx.innerText = i+1;
-
-        const timeEl = document.getElementById("t_"+pid);
-        if (timeEl) timeEl.innerText = fmt(p.remain);
-
-        const btn = document.getElementById("b_"+pid);
-
-        if(btn){
-            if(p.running){
-                btn.innerText = "⏸";
-                btn.onclick = () => pausePlayer(p.id);
-            } else {
-                btn.innerText = "▶";
-                btn.onclick = () => resumePlayer(p.id);
-            }
-        }
-
-        row.classList.remove("warn","danger");
-        if(p.remain <= 300) row.classList.add("warn");
-        if(p.remain <= 60) row.classList.add("danger");
     });
-}
 
-/* ================= LEVELS ================= */
-
-function renderLevels(){
-
-    const el = document.getElementById("levelList");
-    if (!el) return;
-
-    el.innerHTML = "";
-
-    Object.values(levels || [])
-        .sort((a,b)=>a.lvl_from-b.lvl_from)
-        .forEach(p=>{
-
-            const row = document.createElement("div");
-            row.className = "player";
-
-            row.innerHTML = `
-                <div class="name"></div>
-                <div>${p.lvl_from} → ${p.lvl_to}</div>
-                <button class="del">🗑</button>
-            `;
-
-            row.querySelector(".name").textContent = p.name || "";
-            row.querySelector(".del").onclick = () => removeLevel(p.id);
-
-            el.appendChild(row);
-        });
 }
 
 /* ================= ACTIONS ================= */
 
 async function addPlayer(){
 
-    const name = document.getElementById("name")?.value?.trim();
-    const min = parseInt(document.getElementById("min")?.value);
+    const name = document.getElementById("name").value.trim();
+    const min = parseInt(document.getElementById("min").value);
 
-    if(!name || Number.isNaN(min)) return;
+    if(!name || isNaN(min)) return;
 
-    const p = {
+    await save({
         id: uuid(),
         name,
-        time: min * 60,
-        running: true,
-        last_update: new Date().toISOString()
-    };
+        time: min*60,
+        running:true,
+        last_update:new Date().toISOString()
+    });
 
-    await save(p);
     await load();
     render();
 }
 
-async function pausePlayer(id){
-    const p = players[id];
+async function toggle(idv){
+
+    const p = players[idv];
     if(!p) return;
 
+    p.running = !p.running;
+    p.last_update = p.running ? new Date().toISOString() : null;
     p.time = left(p);
-    p.running = false;
-    p.last_update = null;
 
     await save(p);
     await load();
     render();
 }
 
-async function resumePlayer(id){
-    const p = players[id];
-    if(!p) return;
-
-    p.running = true;
-    p.last_update = new Date().toISOString();
-
-    await save(p);
-    await load();
-    render();
-}
-
-async function removePlayer(id){
-    await db.from("timers").delete().eq("id", id);
-    delete players[id];
-    render();
-}
-
-async function add30(id){
-    const p = players[id];
-    if(!p) return;
-
+async function add30(idv){
+    const p = players[idv];
     p.time = left(p) + 1800;
     p.running = true;
-    p.last_update = new Date().toISOString();
-
     await save(p);
     await load();
     render();
 }
 
-async function add1h(id){
-    const p = players[id];
-    if(!p) return;
-
+async function add1h(idv){
+    const p = players[idv];
     p.time = left(p) + 3600;
     p.running = true;
-    p.last_update = new Date().toISOString();
-
     await save(p);
     await load();
+    render();
+}
+
+async function removeP(idv){
+    if(!db) return;
+    await db.from("timers").delete().eq("id",idv);
+    delete players[idv];
     render();
 }
 
@@ -275,58 +273,48 @@ async function add1h(id){
 
 async function addLevel(){
 
-    const name = document.getElementById("lvlName")?.value?.trim();
-    const from = parseInt(document.getElementById("lvlFrom")?.value);
-    const to = parseInt(document.getElementById("lvlTo")?.value);
+    const name = document.getElementById("lvlName").value.trim();
+    const from = parseInt(document.getElementById("lvlFrom").value);
+    const to = parseInt(document.getElementById("lvlTo").value);
 
-    if(!name || Number.isNaN(from) || Number.isNaN(to)) return;
+    if(!name || isNaN(from) || isNaN(to)) return;
 
-    const l = {
+    await saveLevel({
         id: uuid(),
         name,
-        lvl_from: from,
-        lvl_to: to
-    };
+        lvl_from:from,
+        lvl_to:to
+    });
 
-    await saveLevel(l);
     await loadLevels();
     renderLevels();
 }
 
-async function removeLevel(id){
-    await db.from("levels").delete().eq("id", id);
-    delete levels[id];
+async function removeL(idv){
+    await db.from("levels").delete().eq("id",idv);
+    delete levels[idv];
     renderLevels();
 }
 
-/* ================= REALTIME ================= */
-
-db.channel("timers")
-.on("postgres_changes",{event:"*",schema:"public",table:"timers"},async()=>{
-    await load();
-    render();
-})
-.subscribe();
-
-db.channel("levels")
-.on("postgres_changes",{event:"*",schema:"public",table:"levels"},async()=>{
-    await loadLevels();
-    renderLevels();
-})
-.subscribe();
-
-/* ================= INIT ================= */
+/* ================= REAL INIT ================= */
 
 async function init(){
-    await load();
-    await loadLevels();
-    render();
-    renderLevels();
-    setInterval(tick, 1000);
+
+    const ok = initSupabase();
+
+    if(ok){
+        await load();
+        await loadLevels();
+        render();
+        renderLevels();
+    }
+
+    setInterval(tick,1000);
 }
 
 init();
 
-});
-
 </script>
+
+</body>
+</html>
