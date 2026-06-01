@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>EXP L2 FINAL FIX</title>
+<title>EXP L2 FIXED</title>
 
 <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 
@@ -69,8 +69,8 @@ cursor:pointer;
 
 <input id="all" type="number" placeholder="+ всем">
 <button class="add" onclick="addAll()">+ всем</button>
-<button class="pause" onclick="pauseAll()">⏸ всем</button>
-<button class="resume" onclick="resumeAll()">▶ всем</button>
+<button class="pause" onclick="pauseAll()">⏸</button>
+<button class="resume" onclick="resumeAll()">▶</button>
 
 <br><br>
 
@@ -105,9 +105,7 @@ const db = supabase.createClient(
 let players = {};
 let levels = {};
 
-/* ================= HELPERS ================= */
-
-const id = s => String(s);
+/* ===== HELPERS ===== */
 
 const fmt = s => {
 s=Math.max(0,s||0);
@@ -116,10 +114,10 @@ return `${Math.floor(s/3600)}:${String(Math.floor((s%3600)/60)).padStart(2,"0")}
 
 const left = p => {
 if(!p.running || !p.last_update) return p.time||0;
-return Math.max(0,p.time - Math.floor((Date.now()-new Date(p.last_update))/1000));
+return Math.max(0, p.time - Math.floor((Date.now()-new Date(p.last_update))/1000));
 };
 
-/* ================= LOAD ================= */
+/* ===== LOAD ===== */
 
 async function load(){
 const {data}=await db.from("timers").select("*");
@@ -133,15 +131,14 @@ levels={};
 (data||[]).forEach(p=>levels[p.id]=p);
 }
 
-/* ================= SAVE ================= */
+/* ===== SAVE ===== */
 
 const save = p => db.from("timers").upsert(p);
 const saveLevel = p => db.from("levels").upsert(p);
 
-/* ================= RENDER ================= */
+/* ===== RENDER ===== */
 
 function render(){
-
 const list=document.getElementById("list");
 list.innerHTML="";
 
@@ -150,7 +147,6 @@ const arr = Object.values(players)
 .sort((a,b)=>a.remain-b.remain);
 
 arr.forEach((p,i)=>{
-
 const row=document.createElement("div");
 row.className="player";
 
@@ -160,12 +156,9 @@ if(p.remain<=60) row.classList.add("danger");
 row.innerHTML=`
 <div class="idx">${i+1}</div>
 <div class="name">${p.name}</div>
-<div class="time" id="t_${p.id}">0</div>
+<div class="time" id="t_${p.id}"></div>
 
-<button onclick="toggle('${p.id}')">
-${p.running?"⏸":"▶"}
-</button>
-
+<button onclick="toggle('${p.id}')">${p.running?"⏸":"▶"}</button>
 <button class="small" onclick="add30('${p.id}')">+30m</button>
 <button class="small" onclick="add1h('${p.id}')">+1h</button>
 <button class="del" onclick="removeP('${p.id}')">🗑</button>
@@ -175,29 +168,23 @@ list.appendChild(row);
 });
 }
 
-/* ================= LEVELS ================= */
-
 function renderLevels(){
-
 const el=document.getElementById("levelList");
 el.innerHTML="";
 
 Object.values(levels).forEach(l=>{
-
 const row=document.createElement("div");
 row.className="player";
-
 row.innerHTML=`
 <div class="name">${l.name}</div>
 <div>${l.lvl_from} → ${l.lvl_to}</div>
 <button class="del" onclick="removeLevel('${l.id}')">🗑</button>
 `;
-
 el.appendChild(row);
 });
 }
 
-/* ================= LIVE TICK ================= */
+/* ===== LIVE ===== */
 
 function tick(){
 Object.values(players).forEach(p=>{
@@ -206,21 +193,33 @@ if(el) el.innerText=fmt(left(p));
 });
 }
 
-/* ================= ACTIONS (FIXED NO FLASH) ================= */
+/* ===== CORE FIX: MERGE DUPLICATES ===== */
 
-function updateLocal(id, fn){
-const p = players[id];
-if(!p) return;
-fn(p);
+function findByName(name){
+return Object.values(players).find(p=>p.name.toLowerCase()===name.toLowerCase());
 }
 
-/* ADD PLAYER */
+/* ===== ADD PLAYER (FIXED DUPLICATES) ===== */
+
 async function addPlayer(){
 
 const name=document.getElementById("name").value.trim();
 const min=parseInt(document.getElementById("min").value);
 
 if(!name||isNaN(min)) return;
+
+const existing = findByName(name);
+
+if(existing){
+existing.time = left(existing) + min*60;
+existing.running = true;
+existing.last_update = new Date().toISOString();
+
+await save(existing);
+players[existing.id]=existing;
+render();
+return;
+}
 
 const p={
 id:crypto.randomUUID(),
@@ -230,65 +229,68 @@ running:true,
 last_update:new Date().toISOString()
 };
 
-players[p.id]=p; // 🔥 instant UI
+players[p.id]=p;
 render();
-
 await save(p);
 }
 
-/* TOGGLE */
-async function toggle(id){
+/* ===== TOGGLE ===== */
 
-updateLocal(id,p=>{
+async function toggle(id){
+const p=players[id];
+if(!p) return;
+
 p.time=left(p);
 p.running=!p.running;
 p.last_update=p.running?new Date().toISOString():null;
-});
 
 render();
-await save(players[id]);
+await save(p);
 }
 
-/* ADD TIME */
+/* ===== ADD TIME ===== */
+
 async function add30(id){
-updateLocal(id,p=>{
+const p=players[id];
 p.time=left(p)+1800;
 p.running=true;
-});
+p.last_update=new Date().toISOString();
+
 render();
-await save(players[id]);
+await save(p);
 }
 
 async function add1h(id){
-updateLocal(id,p=>{
+const p=players[id];
 p.time=left(p)+3600;
 p.running=true;
-});
+p.last_update=new Date().toISOString();
+
 render();
-await save(players[id]);
+await save(p);
 }
 
-/* DELETE FIXED */
+/* ===== DELETE ===== */
+
 async function removeP(id){
 delete players[id];
 render();
 await db.from("timers").delete().eq("id",id);
 }
 
-/* MASS FIXED */
+/* ===== MASS ===== */
+
 async function addAll(){
 const v=parseInt(document.getElementById("all").value||0);
 
 Object.values(players).forEach(p=>{
 p.time=left(p)+(v||0)*60;
 p.running=true;
+p.last_update=new Date().toISOString();
 });
 
 render();
-
-for(const p of Object.values(players)){
-await save(p);
-}
+await db.from("timers").upsert(Object.values(players));
 }
 
 async function pauseAll(){
@@ -296,11 +298,9 @@ Object.values(players).forEach(p=>{
 p.time=left(p);
 p.running=false;
 });
-render();
 
-for(const p of Object.values(players)){
-await save(p);
-}
+render();
+await db.from("timers").upsert(Object.values(players));
 }
 
 async function resumeAll(){
@@ -308,14 +308,12 @@ Object.values(players).forEach(p=>{
 p.running=true;
 p.last_update=new Date().toISOString();
 });
+
 render();
-
-for(const p of Object.values(players)){
-await save(p);
-}
+await db.from("timers").upsert(Object.values(players));
 }
 
-/* LEVELS */
+/* ===== LEVELS ===== */
 
 async function addLevel(){
 
@@ -329,7 +327,6 @@ const l={id:crypto.randomUUID(),name,lvl_from:from,lvl_to:to};
 
 levels[l.id]=l;
 renderLevels();
-
 await saveLevel(l);
 }
 
@@ -339,23 +336,37 @@ renderLevels();
 await db.from("levels").delete().eq("id",id);
 }
 
-/* ================= REALTIME ================= */
+/* ===== REALTIME FIX (NO FULL RELOAD) ===== */
 
 db.channel("timers")
-.on("postgres_changes",{event:"*",schema:"public",table:"timers"},async()=>{
-await load();
+.on("postgres_changes",{event:"*",schema:"public",table:"timers"},(payload)=>{
+const p = payload.new || payload.old;
+
+if(payload.eventType === "DELETE"){
+delete players[p.id];
+} else {
+players[p.id]=p;
+}
+
 render();
 })
 .subscribe();
 
 db.channel("levels")
-.on("postgres_changes",{event:"*",schema:"public",table:"levels"},async()=>{
-await loadLevels();
+.on("postgres_changes",{event:"*",schema:"public",table:"levels"},(payload)=>{
+const l = payload.new || payload.old;
+
+if(payload.eventType === "DELETE"){
+delete levels[l.id];
+} else {
+levels[l.id]=l;
+}
+
 renderLevels();
 })
 .subscribe();
 
-/* ================= INIT ================= */
+/* ===== INIT ===== */
 
 async function init(){
 await load();
