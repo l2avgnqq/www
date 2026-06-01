@@ -1,151 +1,4 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>EXP L2</title>
-
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
-<style>
-body{
-margin:0;
-background:#0b1220;
-color:#fff;
-font-family:Arial;
-padding:20px;
-}
-
-.layout{
-display:flex;
-gap:20px;
-}
-
-.left{flex:1;}
-
-.right{
-width:340px;
-background:#162033;
-padding:15px;
-border-radius:12px;
-height:fit-content;
-}
-
-.top{
-text-align:center;
-margin-bottom:20px;
-}
-
-.player{
-background:#162033;
-margin:8px 0;
-padding:12px;
-border-radius:12px;
-display:flex;
-align-items:center;
-gap:10px;
-flex-wrap:wrap;
-}
-
-.warn{background:#3a2c00}
-.danger{background:#4a1010}
-
-.idx{width:30px;color:#94a3b8;font-weight:bold;}
-.name{width:140px;font-weight:bold;}
-.time{width:120px;font-size:22px;font-weight:bold;color:#22c55e;}
-
-.actions{
-margin-left:auto;
-display:flex;
-gap:6px;
-flex-wrap:wrap;
-}
-
-input{
-padding:8px;
-border:none;
-border-radius:10px;
-background:#111827;
-color:white;
-width:90px;
-}
-
-button{
-border:none;
-border-radius:10px;
-padding:8px 10px;
-cursor:pointer;
-color:white;
-font-weight:bold;
-}
-
-.add{background:#2563eb}
-.pause{background:#f59e0b}
-.resume{background:#22c55e}
-.del{background:#ef4444}
-.small{background:#334155;font-size:12px}
-</style>
-</head>
-
-<body>
-
-<div class="layout">
-
-<!-- LEFT -->
-<div class="left">
-
-<div class="top">
-
-<h2>EXP L2</h2>
-
-<input id="name" placeholder="Имя">
-<input id="min" type="number" placeholder="Мин">
-
-<button class="add" onclick="addPlayer()">Добавить</button>
-
-<br><br>
-
-<input id="all" type="number" placeholder="+ всем">
-<button class="add" onclick="addAll()">+ всем</button>
-<button class="pause" onclick="pauseAll()">⏸ всем</button>
-<button class="resume" onclick="resumeAll()">▶ всем</button>
-<button class="del" onclick="clearAll()">🗑 всех</button>
-
-</div>
-
-<div id="list"></div>
-
-</div>
-
-<!-- RIGHT -->
-<div class="right">
-
-<h3>Прокачка по lvl</h3>
-
-<div style="display:flex;flex-direction:column;gap:8px;">
-
-<input id="lvlName" placeholder="Ник">
-
-<div style="display:flex;gap:6px;">
-<input id="lvlFrom" type="number" placeholder="с лвл" style="flex:1;">
-<input id="lvlTo" type="number" placeholder="до лвл" style="flex:1;">
-</div>
-
-<button class="add" onclick="addLevel()">Добавить</button>
-
-</div>
-
-<hr>
-
-<div id="levelList"></div>
-
-</div>
-
-</div>
-
 <script>
-
-/* ================= SUPABASE ================= */
 
 const db = supabase.createClient(
 "https://mxwtlfkhykqegzytotlq.supabase.co",
@@ -159,33 +12,33 @@ let levels = {};
 
 /* ================= HELPERS ================= */
 
-const id = s => s.replace(/[^a-z0-9]/gi,"_");
+const id = s => encodeURIComponent(s);
 
 const fmt = s => {
-s=Math.max(0,s);
-let h=Math.floor(s/3600);
-let m=Math.floor((s%3600)/60);
-let sec=s%60;
-return `${h}:${String(m).padStart(2,"0")}:${String(sec).padStart(2,"0")}`;
+    s = Math.max(0, s);
+    let h = Math.floor(s / 3600);
+    let m = Math.floor((s % 3600) / 60);
+    let sec = s % 60;
+    return `${h}:${String(m).padStart(2,"0")}:${String(sec).padStart(2,"0")}`;
 };
 
 const left = p => {
-if(!p.running || !p.last_update) return p.time;
-return Math.max(0,p.time - Math.floor((Date.now()-new Date(p.last_update))/1000));
+    if (!p.running || !p.last_update) return p.time;
+    return Math.max(0, p.time - Math.floor((Date.now() - new Date(p.last_update)) / 1000));
 };
 
 /* ================= LOAD ================= */
 
 async function load(){
-let {data}=await db.from("timers").select("*");
-players={};
-(data||[]).forEach(p=>players[p.name]=p);
+    const {data} = await db.from("timers").select("*");
+    players = {};
+    (data || []).forEach(p => players[p.id] = p);
 }
 
 async function loadLevels(){
-let {data}=await db.from("levels").select("*");
-levels={};
-(data||[]).forEach(p=>levels[p.name]=p);
+    const {data} = await db.from("levels").select("*");
+    levels = {};
+    (data || []).forEach(p => levels[p.id] = p);
 }
 
 /* ================= SAVE ================= */
@@ -193,313 +46,254 @@ levels={};
 const save = p => db.from("timers").upsert(p);
 const saveLevel = p => db.from("levels").upsert(p);
 
-/* ================= RENDER ROW ================= */
+/* ================= RENDER PLAYERS ================= */
 
 function createRow(p){
 
-let pid=id(p.name);
+    const pid = id(p.id);
 
-let div=document.createElement("div");
-div.className="player";
-div.id="r_"+pid;
+    const div = document.createElement("div");
+    div.className = "player";
+    div.id = "r_" + pid;
 
-div.innerHTML=`
-<div class="idx"></div>
-<div class="name">${p.name}</div>
-<div class="time" id="t_${pid}">0</div>
+    div.innerHTML = `
+        <div class="idx"></div>
+        <div class="name"></div>
+        <div class="time" id="t_${pid}">0</div>
+        <div class="actions">
+            <button id="b_${pid}"></button>
+            <button class="small">+30m</button>
+            <button class="small">+1h</button>
+            <button class="del">🗑</button>
+        </div>
+    `;
 
-<div class="actions">
+    div.querySelector(".name").textContent = p.name;
 
-<button id="b_${pid}"></button>
+    div.querySelectorAll(".small")[0].onclick = () => add30(p.id);
+    div.querySelectorAll(".small")[1].onclick = () => add1h(p.id);
+    div.querySelector(".del").onclick = () => removePlayer(p.id);
 
-<button class="small" onclick="add30('${p.name}')">+30m</button>
-<button class="small" onclick="add1h('${p.name}')">+1h</button>
-
-<button class="del" onclick="removePlayer('${p.name}')">🗑</button>
-
-</div>
-`;
-
-document.getElementById("list").appendChild(div);
+    document.getElementById("list").appendChild(div);
 }
 
-/* ================= MAIN RENDER ================= */
+/* ================= RENDER ================= */
 
 function render(){
 
-document.querySelectorAll(".player").forEach(r=>{
-let rid=r.id.replace("r_","");
-let exists=Object.values(players).some(p=>id(p.name)===rid);
-if(!exists) r.remove();
-});
+    document.querySelectorAll(".player").forEach(r=>{
+        if(r.id.startsWith("r_")){
+            const rid = r.id.replace("r_","");
+            if(!players[rid]) r.remove();
+        }
+    });
 
-Object.values(players).forEach(p=>{
-let pid=id(p.name);
-if(!document.getElementById("r_"+pid)) createRow(p);
-});
-
+    Object.values(players).forEach(p=>{
+        const pid = id(p.id);
+        if(!document.getElementById("r_"+pid)) createRow(p);
+    });
 }
 
-/* ================= SORTED TICK ================= */
+/* ================= TICK ================= */
 
 function tick(){
 
-let arr = Object.values(players)
-.map(p=>({
-...p,
-remain:left(p)
-}))
-.sort((a,b)=>a.remain-b.remain); // 🔥 главный фикс
+    const arr = Object.values(players)
+        .map(p => ({...p, remain:left(p)}))
+        .sort((a,b)=>a.remain-b.remain);
 
-arr.forEach((p,i)=>{
+    arr.forEach((p,i)=>{
 
-let pid=id(p.name);
-let row=document.getElementById("r_"+pid);
-if(!row) return;
+        const pid = id(p.id);
+        const row = document.getElementById("r_"+pid);
+        if(!row) return;
 
-// порядок в DOM
-document.getElementById("list").appendChild(row);
+        document.getElementById("list").appendChild(row);
 
-// индекс
-row.querySelector(".idx").innerText=i+1;
+        row.querySelector(".idx").innerText = i+1;
+        document.getElementById("t_"+pid).innerText = fmt(p.remain);
 
-// таймер
-document.getElementById("t_"+pid).innerText=fmt(p.remain);
+        const btn = document.getElementById("b_"+pid);
 
-// toggle кнопка
-let btn=document.getElementById("b_"+pid);
+        if(p.running){
+            btn.innerText = "⏸";
+            btn.onclick = () => pausePlayer(p.id);
+        } else {
+            btn.innerText = "▶";
+            btn.onclick = () => resumePlayer(p.id);
+        }
 
-if(p.running){
-btn.innerText="⏸";
-btn.className="pause";
-btn.onclick=()=>pausePlayer(p.name);
-}else{
-btn.innerText="▶";
-btn.className="resume";
-btn.onclick=()=>resumePlayer(p.name);
+        row.classList.remove("warn","danger");
+        if(p.remain <= 300) row.classList.add("warn");
+        if(p.remain <= 60) row.classList.add("danger");
+
+        row.querySelector(".name").textContent = p.name;
+    });
 }
 
-// цвет
-row.classList.remove("warn","danger");
-if(p.remain<=300) row.classList.add("warn");
-if(p.remain<=60) row.classList.add("danger");
+/* ================= LEVELS ================= */
 
-});
+function renderLevels(){
 
+    const el = document.getElementById("levelList");
+    el.innerHTML = "";
+
+    Object.values(levels)
+        .sort((a,b)=>a.lvl_from-b.lvl_from)
+        .forEach(p=>{
+
+            const row = document.createElement("div");
+            row.className = "player";
+
+            row.innerHTML = `
+                <div class="name"></div>
+                <div>${p.lvl_from} → ${p.lvl_to}</div>
+                <button class="del">🗑</button>
+            `;
+
+            row.querySelector(".name").textContent = p.name;
+            row.querySelector(".del").onclick = () => removeLevel(p.id);
+
+            el.appendChild(row);
+        });
 }
 
 /* ================= ACTIONS ================= */
 
 async function addPlayer(){
 
-let name=nameInput.value.trim();
-let min=parseInt(minInput.value);
+    const name = nameInput.value.trim();
+    const min = parseInt(minInput.value);
 
-if(!name||!min) return;
+    if(!name || Number.isNaN(min)) return;
 
-let p=players[name] || {
-name,
-time:0,
-running:false,
-last_update:null
-};
+    const p = {
+        id: crypto.randomUUID(),
+        name,
+        time: min * 60,
+        running: true,
+        last_update: new Date().toISOString()
+    };
 
-p.time = left(p) + min*60;
-p.running = true;
-p.last_update = new Date().toISOString();
-
-await save(p);
-await load();
-render();
+    await save(p);
+    await load();
+    render();
 }
 
-async function add30(name){
-let p=players[name];
-if(!p) return;
+async function pausePlayer(id){
+    const p = players[id];
+    if(!p) return;
 
-p.time = left(p) + 30*60;
-p.running = true;
-p.last_update = new Date().toISOString();
+    p.time = left(p);
+    p.running = false;
+    p.last_update = null;
 
-await save(p);
-await load();
-render();
+    await save(p);
+    await load();
+    render();
 }
 
-async function add1h(name){
-let p=players[name];
-if(!p) return;
+async function resumePlayer(id){
+    const p = players[id];
+    if(!p) return;
 
-p.time = left(p) + 60*60;
-p.running = true;
-p.last_update = new Date().toISOString();
+    p.running = true;
+    p.last_update = new Date().toISOString();
 
-await save(p);
-await load();
-render();
+    await save(p);
+    await load();
+    render();
 }
 
-/* TOGGLE */
-async function pausePlayer(name){
-let p=players[name];
-if(!p) return;
-
-p.time = left(p);
-p.running = false;
-p.last_update = null;
-
-await save(p);
-await load();
-render();
+async function removePlayer(id){
+    await db.from("timers").delete().eq("id", id);
+    delete players[id];
+    render();
 }
 
-async function resumePlayer(name){
-let p=players[name];
-if(!p) return;
+async function add30(id){
+    const p = players[id];
+    if(!p) return;
 
-if(left(p)<=0) return;
+    p.time = left(p) + 1800;
+    p.running = true;
+    p.last_update = new Date().toISOString();
 
-p.running = true;
-p.last_update = new Date().toISOString();
-
-await save(p);
-await load();
-render();
+    await save(p);
+    await load();
+    render();
 }
 
-async function removePlayer(name){
-await db.from("timers").delete().eq("name",name);
-delete players[name];
-render();
-}
+async function add1h(id){
+    const p = players[id];
+    if(!p) return;
 
-/* ================= GLOBAL ================= */
+    p.time = left(p) + 3600;
+    p.running = true;
+    p.last_update = new Date().toISOString();
 
-async function addAll(){
-let v=parseInt(all.value);
-if(!v) return;
-
-for(let p of Object.values(players)){
-p.time = left(p) + v*60;
-p.running = true;
-p.last_update = new Date().toISOString();
-await save(p);
-}
-
-await load();
-render();
-}
-
-async function pauseAll(){
-for(let p of Object.values(players)){
-p.time = left(p);
-p.running = false;
-p.last_update = null;
-await save(p);
-}
-
-await load();
-render();
-}
-
-async function resumeAll(){
-for(let p of Object.values(players)){
-if(left(p)<=0) continue;
-p.running = true;
-p.last_update = new Date().toISOString();
-await save(p);
-}
-
-await load();
-render();
-}
-
-async function clearAll(){
-await db.from("timers").delete().neq("name","___");
-players={};
-render();
+    await save(p);
+    await load();
+    render();
 }
 
 /* ================= LEVELS ================= */
 
 async function addLevel(){
 
-let name=lvlName.value.trim();
-let from=parseInt(lvlFrom.value);
-let to=parseInt(lvlTo.value);
+    const name = lvlName.value.trim();
+    const from = parseInt(lvlFrom.value);
+    const to = parseInt(lvlTo.value);
 
-if(!name||!from||!to) return;
+    if(!name || Number.isNaN(from) || Number.isNaN(to)) return;
 
-await saveLevel({
-name,
-lvl_from:from,
-lvl_to:to
-});
+    const l = {
+        id: crypto.randomUUID(),
+        name,
+        lvl_from: from,
+        lvl_to: to
+    };
 
-await loadLevels();
-renderLevels();
-
-lvlName.value="";
-lvlFrom.value="";
-lvlTo.value="";
+    await saveLevel(l);
+    await loadLevels();
+    renderLevels();
 }
 
-async function removeLevel(name){
-await db.from("levels").delete().eq("name",name);
-delete levels[name];
-renderLevels();
+async function removeLevel(id){
+    await db.from("levels").delete().eq("id", id);
+    delete levels[id];
+    renderLevels();
 }
-
-function renderLevels(){
-
-let html="";
-
-Object.values(levels)
-.sort((a,b)=>a.lvl_from-b.lvl_from)
-.forEach(p=>{
-html+=`
-<div class="player">
-<div class="name">${p.name}</div>
-<div>${p.lvl_from} → ${p.lvl_to}</div>
-<button class="del" onclick="removeLevel('${p.name}')">🗑</button>
-</div>`;
-});
-
-document.getElementById("levelList").innerHTML=html;
-}
-
-/* ================= INIT ================= */
-
-const nameInput=document.getElementById("name");
-const minInput=document.getElementById("min");
-
-async function init(){
-await load();
-await loadLevels();
-render();
-renderLevels();
-setInterval(tick,1000);
-}
-
-init();
 
 /* ================= REALTIME ================= */
 
 db.channel("timers")
 .on("postgres_changes",{event:"*",schema:"public",table:"timers"},async()=>{
-await load();
-render();
+    await load();
+    render();
 })
 .subscribe();
 
 db.channel("levels")
 .on("postgres_changes",{event:"*",schema:"public",table:"levels"},async()=>{
-await loadLevels();
-renderLevels();
+    await loadLevels();
+    renderLevels();
 })
 .subscribe();
 
-</script>
+/* ================= INIT ================= */
 
-</body>
-</html>
+const nameInput = document.getElementById("name");
+const minInput = document.getElementById("min");
+
+async function init(){
+    await load();
+    await loadLevels();
+    render();
+    renderLevels();
+    setInterval(tick, 1000);
+}
+
+init();
+
+</script>
