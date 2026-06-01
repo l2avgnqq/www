@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>EXP L2 FIXED</title>
+<title>EXP L2 </title>
 
 <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 
@@ -184,7 +184,7 @@ el.appendChild(row);
 });
 }
 
-/* ===== LIVE ===== */
+/* ===== TICK ===== */
 
 function tick(){
 Object.values(players).forEach(p=>{
@@ -193,13 +193,13 @@ if(el) el.innerText=fmt(left(p));
 });
 }
 
-/* ===== CORE FIX: MERGE DUPLICATES ===== */
+/* ===== MERGE ===== */
 
 function findByName(name){
 return Object.values(players).find(p=>p.name.toLowerCase()===name.toLowerCase());
 }
 
-/* ===== ADD PLAYER (FIXED DUPLICATES) ===== */
+/* ===== ADD PLAYER (FIX DUPLICATES) ===== */
 
 async function addPlayer(){
 
@@ -208,16 +208,16 @@ const min=parseInt(document.getElementById("min").value);
 
 if(!name||isNaN(min)) return;
 
-const existing = findByName(name);
+const existing=findByName(name);
 
 if(existing){
 existing.time = left(existing) + min*60;
 existing.running = true;
 existing.last_update = new Date().toISOString();
 
-await save(existing);
 players[existing.id]=existing;
 render();
+await save(existing);
 return;
 }
 
@@ -234,12 +234,10 @@ render();
 await save(p);
 }
 
-/* ===== TOGGLE ===== */
+/* ===== ACTIONS ===== */
 
 async function toggle(id){
 const p=players[id];
-if(!p) return;
-
 p.time=left(p);
 p.running=!p.running;
 p.last_update=p.running?new Date().toISOString():null;
@@ -247,8 +245,6 @@ p.last_update=p.running?new Date().toISOString():null;
 render();
 await save(p);
 }
-
-/* ===== ADD TIME ===== */
 
 async function add30(id){
 const p=players[id];
@@ -269,8 +265,6 @@ p.last_update=new Date().toISOString();
 render();
 await save(p);
 }
-
-/* ===== DELETE ===== */
 
 async function removeP(id){
 delete players[id];
@@ -336,18 +330,13 @@ renderLevels();
 await db.from("levels").delete().eq("id",id);
 }
 
-/* ===== REALTIME FIX (NO FULL RELOAD) ===== */
+/* ===== REALTIME (backup) ===== */
 
 db.channel("timers")
 .on("postgres_changes",{event:"*",schema:"public",table:"timers"},(payload)=>{
 const p = payload.new || payload.old;
-
-if(payload.eventType === "DELETE"){
-delete players[p.id];
-} else {
-players[p.id]=p;
-}
-
+if(payload.eventType==="DELETE") delete players[p.id];
+else players[p.id]=p;
 render();
 })
 .subscribe();
@@ -355,25 +344,27 @@ render();
 db.channel("levels")
 .on("postgres_changes",{event:"*",schema:"public",table:"levels"},(payload)=>{
 const l = payload.new || payload.old;
-
-if(payload.eventType === "DELETE"){
-delete levels[l.id];
-} else {
-levels[l.id]=l;
-}
-
+if(payload.eventType==="DELETE") delete levels[l.id];
+else levels[l.id]=l;
 renderLevels();
 })
 .subscribe();
 
-/* ===== INIT ===== */
+/* ===== AUTO SYNC (KEY FIX) ===== */
 
-async function init(){
+async function sync(){
 await load();
 await loadLevels();
 render();
 renderLevels();
-setInterval(tick,1000);
+}
+
+/* ===== INIT ===== */
+
+async function init(){
+await sync();
+setInterval(sync, 3000);   // 🔥 авто обновление каждые 3 сек
+setInterval(tick, 1000);   // таймер
 }
 
 init();
