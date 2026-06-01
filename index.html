@@ -3,30 +3,54 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>EXP L2 AUTO SYNC</title>
+<title>EXP L2</title>
 
 <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 
 <style>
+
+/* ===== BASE ===== */
 body{
 margin:0;
 font-family:Arial;
 color:#fff;
+background:#0b1220;
+overflow-x:hidden;
+padding:20px;
+}
 
-/* 🐷 СВИНКА НА ФОН */
+/* ===== MOVING PIG BACKGROUND ===== */
+.bg{
+position:fixed;
+top:0;
+left:0;
+width:120%;
+height:120%;
+z-index:-1;
+
 background:
 linear-gradient(rgba(0,0,0,0.65), rgba(0,0,0,0.65)),
 url("https://top-mmorpg.ru/uploads/posts/2019-05/1559042975_l2obloj.jpg");
 
 background-size:cover;
 background-position:center;
-background-attachment:fixed;
-padding:20px;
+
+animation:pigMove 20s ease-in-out infinite;
+filter:brightness(0.9);
 }
 
+@keyframes pigMove{
+0%   { transform:translate(0,0) scale(1.05); }
+25%  { transform:translate(-20px,-10px) scale(1.08); }
+50%  { transform:translate(20px,10px) scale(1.03); }
+75%  { transform:translate(-10px,15px) scale(1.06); }
+100% { transform:translate(0,0) scale(1.05); }
+}
+
+/* ===== UI ===== */
 .layout{display:flex;gap:20px;}
 .left{flex:1;}
-.right{width:340px;background:#162033cc;padding:15px;border-radius:12px;}
+.right{width:340px;background:#162033cc;padding:15px;border-radius:12px;backdrop-filter:blur(4px);}
 
 .player{
 background:#162033cc;
@@ -37,7 +61,7 @@ display:flex;
 align-items:center;
 gap:10px;
 flex-wrap:wrap;
-backdrop-filter: blur(3px);
+backdrop-filter:blur(3px);
 }
 
 .warn{background:#3a2c00cc}
@@ -59,10 +83,14 @@ cursor:pointer;
 .resume{background:#22c55e}
 .del{background:#ef4444}
 .small{background:#334155;color:#fff}
+
 </style>
 </head>
 
 <body>
+
+<!-- 🐷 background layer -->
+<div class="bg"></div>
 
 <div class="layout">
 
@@ -89,7 +117,7 @@ cursor:pointer;
 
 <div class="right">
 
-<h3>Лвл</h3>
+<h3>Прокачка по Лвл</h3>
 
 <input id="lvlName" placeholder="Ник"><br><br>
 <input id="lvlFrom" type="number" placeholder="с лвл">
