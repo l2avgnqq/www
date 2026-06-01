@@ -1,5 +1,14 @@
 <script>
 
+window.addEventListener("DOMContentLoaded", async () => {
+
+if (typeof supabase === "undefined") {
+    document.body.innerHTML = "<h2 style='color:white'>Supabase не загрузился</h2>";
+    return;
+}
+
+/* ================= SUPABASE ================= */
+
 const db = supabase.createClient(
 "https://mxwtlfkhykqegzytotlq.supabase.co",
 "sb_publishable_-FajhSo3HLdy00i5VNemSA_89bLw5Qp"
@@ -12,45 +21,60 @@ let levels = {};
 
 /* ================= HELPERS ================= */
 
-const id = s => encodeURIComponent(s);
+const safeId = (s) =>
+    encodeURIComponent(String(s ?? ""));
 
-const fmt = s => {
-    s = Math.max(0, s);
+const uuid = () =>
+    (crypto && crypto.randomUUID)
+        ? crypto.randomUUID()
+        : String(Date.now() + Math.random());
+
+const fmt = (s) => {
+    s = Math.max(0, s || 0);
     let h = Math.floor(s / 3600);
     let m = Math.floor((s % 3600) / 60);
     let sec = s % 60;
     return `${h}:${String(m).padStart(2,"0")}:${String(sec).padStart(2,"0")}`;
 };
 
-const left = p => {
-    if (!p.running || !p.last_update) return p.time;
-    return Math.max(0, p.time - Math.floor((Date.now() - new Date(p.last_update)) / 1000));
+const left = (p) => {
+    if (!p || !p.running || !p.last_update) return p.time || 0;
+    return Math.max(0,
+        (p.time || 0) - Math.floor((Date.now() - new Date(p.last_update)) / 1000)
+    );
 };
 
 /* ================= LOAD ================= */
 
 async function load(){
-    const {data} = await db.from("timers").select("*");
-    players = {};
-    (data || []).forEach(p => players[p.id] = p);
+    try {
+        const {data} = await db.from("timers").select("*");
+        players = {};
+        (data || []).forEach(p => players[p.id] = p);
+    } catch(e){}
 }
 
 async function loadLevels(){
-    const {data} = await db.from("levels").select("*");
-    levels = {};
-    (data || []).forEach(p => levels[p.id] = p);
+    try {
+        const {data} = await db.from("levels").select("*");
+        levels = {};
+        (data || []).forEach(p => levels[p.id] = p);
+    } catch(e){}
 }
 
 /* ================= SAVE ================= */
 
-const save = p => db.from("timers").upsert(p);
-const saveLevel = p => db.from("levels").upsert(p);
+const save = (p) =>
+    db.from("timers").upsert(p);
+
+const saveLevel = (p) =>
+    db.from("levels").upsert(p);
 
 /* ================= RENDER PLAYERS ================= */
 
 function createRow(p){
 
-    const pid = id(p.id);
+    const pid = safeId(p.id);
 
     const div = document.createElement("div");
     div.className = "player";
@@ -68,18 +92,22 @@ function createRow(p){
         </div>
     `;
 
-    div.querySelector(".name").textContent = p.name;
+    div.querySelector(".name").textContent = p.name || "";
 
     div.querySelectorAll(".small")[0].onclick = () => add30(p.id);
     div.querySelectorAll(".small")[1].onclick = () => add1h(p.id);
     div.querySelector(".del").onclick = () => removePlayer(p.id);
 
-    document.getElementById("list").appendChild(div);
+    const list = document.getElementById("list");
+    if (list) list.appendChild(div);
 }
 
 /* ================= RENDER ================= */
 
 function render(){
+
+    const list = document.getElementById("list");
+    if (!list) return;
 
     document.querySelectorAll(".player").forEach(r=>{
         if(r.id.startsWith("r_")){
@@ -89,7 +117,7 @@ function render(){
     });
 
     Object.values(players).forEach(p=>{
-        const pid = id(p.id);
+        const pid = safeId(p.id);
         if(!document.getElementById("r_"+pid)) createRow(p);
     });
 }
@@ -98,36 +126,40 @@ function render(){
 
 function tick(){
 
-    const arr = Object.values(players)
+    const arr = Object.values(players || {})
         .map(p => ({...p, remain:left(p)}))
         .sort((a,b)=>a.remain-b.remain);
 
     arr.forEach((p,i)=>{
 
-        const pid = id(p.id);
+        const pid = safeId(p.id);
         const row = document.getElementById("r_"+pid);
         if(!row) return;
 
-        document.getElementById("list").appendChild(row);
+        const list = document.getElementById("list");
+        if (list) list.appendChild(row);
 
-        row.querySelector(".idx").innerText = i+1;
-        document.getElementById("t_"+pid).innerText = fmt(p.remain);
+        const idx = row.querySelector(".idx");
+        if (idx) idx.innerText = i+1;
+
+        const timeEl = document.getElementById("t_"+pid);
+        if (timeEl) timeEl.innerText = fmt(p.remain);
 
         const btn = document.getElementById("b_"+pid);
 
-        if(p.running){
-            btn.innerText = "⏸";
-            btn.onclick = () => pausePlayer(p.id);
-        } else {
-            btn.innerText = "▶";
-            btn.onclick = () => resumePlayer(p.id);
+        if(btn){
+            if(p.running){
+                btn.innerText = "⏸";
+                btn.onclick = () => pausePlayer(p.id);
+            } else {
+                btn.innerText = "▶";
+                btn.onclick = () => resumePlayer(p.id);
+            }
         }
 
         row.classList.remove("warn","danger");
         if(p.remain <= 300) row.classList.add("warn");
         if(p.remain <= 60) row.classList.add("danger");
-
-        row.querySelector(".name").textContent = p.name;
     });
 }
 
@@ -136,9 +168,11 @@ function tick(){
 function renderLevels(){
 
     const el = document.getElementById("levelList");
+    if (!el) return;
+
     el.innerHTML = "";
 
-    Object.values(levels)
+    Object.values(levels || [])
         .sort((a,b)=>a.lvl_from-b.lvl_from)
         .forEach(p=>{
 
@@ -151,7 +185,7 @@ function renderLevels(){
                 <button class="del">🗑</button>
             `;
 
-            row.querySelector(".name").textContent = p.name;
+            row.querySelector(".name").textContent = p.name || "";
             row.querySelector(".del").onclick = () => removeLevel(p.id);
 
             el.appendChild(row);
@@ -162,13 +196,13 @@ function renderLevels(){
 
 async function addPlayer(){
 
-    const name = nameInput.value.trim();
-    const min = parseInt(minInput.value);
+    const name = document.getElementById("name")?.value?.trim();
+    const min = parseInt(document.getElementById("min")?.value);
 
     if(!name || Number.isNaN(min)) return;
 
     const p = {
-        id: crypto.randomUUID(),
+        id: uuid(),
         name,
         time: min * 60,
         running: true,
@@ -241,14 +275,14 @@ async function add1h(id){
 
 async function addLevel(){
 
-    const name = lvlName.value.trim();
-    const from = parseInt(lvlFrom.value);
-    const to = parseInt(lvlTo.value);
+    const name = document.getElementById("lvlName")?.value?.trim();
+    const from = parseInt(document.getElementById("lvlFrom")?.value);
+    const to = parseInt(document.getElementById("lvlTo")?.value);
 
     if(!name || Number.isNaN(from) || Number.isNaN(to)) return;
 
     const l = {
-        id: crypto.randomUUID(),
+        id: uuid(),
         name,
         lvl_from: from,
         lvl_to: to
@@ -283,9 +317,6 @@ db.channel("levels")
 
 /* ================= INIT ================= */
 
-const nameInput = document.getElementById("name");
-const minInput = document.getElementById("min");
-
 async function init(){
     await load();
     await loadLevels();
@@ -295,5 +326,7 @@ async function init(){
 }
 
 init();
+
+});
 
 </script>
