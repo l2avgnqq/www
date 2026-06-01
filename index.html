@@ -21,7 +21,7 @@ if(!p.running || !p.last_update) return p.time||0;
 return Math.max(0, p.time - Math.floor((Date.now()-new Date(p.last_update))/1000));
 };
 
-/* ===== LOAD ===== */
+/* ===== SAFE LOAD ONCE ===== */
 
 async function loadAll(){
 const {data: t}=await db.from("timers").select("*");
@@ -31,12 +31,6 @@ players={};
 const {data: l}=await db.from("levels").select("*");
 levels={};
 (l||[]).forEach(x=>levels[x.id]=x);
-}
-
-/* ===== FIND ===== */
-
-function findByName(name){
-return Object.values(players).find(p=>p.name.toLowerCase()===name.toLowerCase());
 }
 
 /* ===== DOM ===== */
@@ -61,7 +55,7 @@ document.getElementById("list").appendChild(row);
 dom[p.id]=row;
 }
 
-/* ===== FULL RENDER ===== */
+/* ===== RENDER ON START ONLY ===== */
 
 function renderAll(){
 document.getElementById("list").innerHTML="";
@@ -75,7 +69,7 @@ updateRow(p,i);
 });
 }
 
-/* ===== UPDATE ROW ===== */
+/* ===== UPDATE ONLY ===== */
 
 function updateRow(p,index){
 const el=dom[p.id];
@@ -92,24 +86,26 @@ el.classList.remove("warn");
 }
 }
 
-/* ===== TICK (smooth UI) ===== */
+/* ===== TICK ===== */
 
 function tick(){
 const arr=Object.values(players)
 .sort((a,b)=>left(a)-left(b));
 
-arr.forEach((p,i)=>{
-updateRow(p,i);
-});
+arr.forEach((p,i)=>updateRow(p,i));
 }
 
-/* ===== FIX: SAFE UPSERT ===== */
+/* ===== SAFE SAVE ===== */
 
 async function save(p){
 await db.from("timers").upsert(p);
 }
 
-/* ===== ADD PLAYER (FIX DUPLICATES) ===== */
+/* ===== ADD (FIX DUPLICATES) ===== */
+
+function findByName(name){
+return Object.values(players).find(p=>p.name.toLowerCase()===name.toLowerCase());
+}
 
 async function addPlayer(){
 
@@ -125,8 +121,6 @@ existing.time=left(existing)+min*60;
 existing.running=true;
 existing.last_update=new Date().toISOString();
 
-players[existing.id]=existing;
-updateRow(existing,0);
 await save(existing);
 return;
 }
@@ -152,7 +146,6 @@ const p=players[id];
 p.time=left(p);
 p.running=!p.running;
 p.last_update=p.running?new Date().toISOString():null;
-
 await save(p);
 }
 
@@ -161,7 +154,6 @@ const p=players[id];
 p.time=left(p)+1800;
 p.running=true;
 p.last_update=new Date().toISOString();
-
 await save(p);
 }
 
@@ -170,7 +162,6 @@ const p=players[id];
 p.time=left(p)+3600;
 p.running=true;
 p.last_update=new Date().toISOString();
-
 await save(p);
 }
 
@@ -180,7 +171,7 @@ if(dom[id]) dom[id].remove();
 await db.from("timers").delete().eq("id",id);
 }
 
-/* ===== LEVELS FIXED ===== */
+/* ===== LEVELS (FIXED SIMPLE) ===== */
 
 async function addLevel(){
 
@@ -193,8 +184,9 @@ if(!name||isNaN(from)||isNaN(to)) return;
 const l={id:crypto.randomUUID(),name,lvl_from:from,lvl_to:to};
 
 levels[l.id]=l;
-renderLevels();
+
 await db.from("levels").upsert(l);
+renderLevels();
 }
 
 function renderLevels(){
@@ -219,7 +211,7 @@ renderLevels();
 await db.from("levels").delete().eq("id",id);
 }
 
-/* ===== REALTIME SAFE ===== */
+/* ===== REALTIME ONLY (NO LOOPS) ===== */
 
 db.channel("timers")
 .on("postgres_changes",{event:"*",schema:"public",table:"timers"},(payload)=>{
@@ -234,8 +226,6 @@ return;
 players[p.id]=p;
 
 if(!dom[p.id]) createPlayer(p);
-
-updateRow(p,0);
 })
 .subscribe();
 
@@ -253,21 +243,12 @@ renderLevels();
 })
 .subscribe();
 
-/* ===== FIXED SYNC (NO PAGE RELOAD NEEDED) ===== */
-
-async function refreshFromServer(){
-await loadAll();
-renderAll();
-}
-
-/* ===== INIT ===== */
+/* ===== INIT SAFE ===== */
 
 async function init(){
 await loadAll();
 renderAll();
-
 setInterval(tick,1000);
-setInterval(refreshFromServer,5000); // 🔥 фикс рассинхрона
 }
 
 init();
