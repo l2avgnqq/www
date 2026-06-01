@@ -8,52 +8,20 @@
 <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 
 <style>
-
-/* ===== BASE ===== */
 body{
 margin:0;
-font-family:Arial;
-color:#fff;
 background:#0b1220;
-overflow-x:hidden;
+color:#fff;
+font-family:Arial;
 padding:20px;
 }
 
-/* ===== MOVING PIG BACKGROUND ===== */
-.bg{
-position:fixed;
-top:0;
-left:0;
-width:120%;
-height:120%;
-z-index:-1;
-
-background:
-linear-gradient(rgba(0,0,0,0.65), rgba(0,0,0,0.65)),
-url("https://top-mmorpg.ru/uploads/posts/2019-05/1559042975_l2obloj.jpg");
-
-background-size:cover;
-background-position:center;
-
-animation:pigMove 20s ease-in-out infinite;
-filter:brightness(0.9);
-}
-
-@keyframes pigMove{
-0%   { transform:translate(0,0) scale(1.05); }
-25%  { transform:translate(-20px,-10px) scale(1.08); }
-50%  { transform:translate(20px,10px) scale(1.03); }
-75%  { transform:translate(-10px,15px) scale(1.06); }
-100% { transform:translate(0,0) scale(1.05); }
-}
-
-/* ===== UI ===== */
 .layout{display:flex;gap:20px;}
 .left{flex:1;}
-.right{width:340px;background:#162033cc;padding:15px;border-radius:12px;backdrop-filter:blur(4px);}
+.right{width:340px;background:#162033;padding:15px;border-radius:12px;}
 
 .player{
-background:#162033cc;
+background:#162033;
 margin:8px 0;
 padding:12px;
 border-radius:12px;
@@ -61,11 +29,10 @@ display:flex;
 align-items:center;
 gap:10px;
 flex-wrap:wrap;
-backdrop-filter:blur(3px);
 }
 
-.warn{background:#3a2c00cc}
-.danger{background:#4a1010cc}
+.warn{background:#3a2c00}
+.danger{background:#4a1010}
 
 .idx{width:30px;}
 .name{width:140px;font-weight:bold;}
@@ -83,14 +50,10 @@ cursor:pointer;
 .resume{background:#22c55e}
 .del{background:#ef4444}
 .small{background:#334155;color:#fff}
-
 </style>
 </head>
 
 <body>
-
-<!-- 🐷 background layer -->
-<div class="bg"></div>
 
 <div class="layout">
 
@@ -117,7 +80,7 @@ cursor:pointer;
 
 <div class="right">
 
-<h3>Прокачка по Лвл</h3>
+<h3>КАЧ ПО Лвл</h3>
 
 <input id="lvlName" placeholder="Ник"><br><br>
 <input id="lvlFrom" type="number" placeholder="с лвл">
@@ -230,13 +193,13 @@ if(el) el.innerText=fmt(left(p));
 });
 }
 
-/* ===== FIND ===== */
+/* ===== MERGE ===== */
 
 function findByName(name){
 return Object.values(players).find(p=>p.name.toLowerCase()===name.toLowerCase());
 }
 
-/* ===== ADD PLAYER ===== */
+/* ===== ADD PLAYER (FIX DUPLICATES) ===== */
 
 async function addPlayer(){
 
@@ -367,11 +330,11 @@ renderLevels();
 await db.from("levels").delete().eq("id",id);
 }
 
-/* ===== REALTIME ===== */
+/* ===== REALTIME (backup) ===== */
 
 db.channel("timers")
 .on("postgres_changes",{event:"*",schema:"public",table:"timers"},(payload)=>{
-const p=payload.new||payload.old;
+const p = payload.new || payload.old;
 if(payload.eventType==="DELETE") delete players[p.id];
 else players[p.id]=p;
 render();
@@ -380,20 +343,28 @@ render();
 
 db.channel("levels")
 .on("postgres_changes",{event:"*",schema:"public",table:"levels"},(payload)=>{
-const l=payload.new||payload.old;
+const l = payload.new || payload.old;
 if(payload.eventType==="DELETE") delete levels[l.id];
 else levels[l.id]=l;
 renderLevels();
 })
 .subscribe();
 
-/* ===== INIT ===== */
+/* ===== AUTO SYNC (KEY FIX) ===== */
 
-async function init(){
+async function sync(){
 await load();
 await loadLevels();
 render();
-setInterval(tick,1000);
+renderLevels();
+}
+
+/* ===== INIT ===== */
+
+async function init(){
+await sync();
+setInterval(sync, 3000);   // 🔥 авто обновление каждые 3 сек
+setInterval(tick, 1000);   // таймер
 }
 
 init();
